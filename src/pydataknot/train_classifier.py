@@ -26,6 +26,8 @@ def prepare_data(cfg: DKClassifierConfig) -> None:
     dataset = data["dataset"]
     labelset = data["labelset"]
 
+    dataset, selected_features = select_features(dataset, cfg)
+
     source_file = "source.json"
     with open(source_file, "w") as fp:
         json.dump(dataset, fp)
@@ -34,7 +36,27 @@ def prepare_data(cfg: DKClassifierConfig) -> None:
     with open(target_file, "w") as fp:
         json.dump(labelset, fp)
 
-    return setup_data(source_file, target_file, cfg)
+    return setup_data(source_file, target_file, cfg), selected_features
+
+
+def select_features(
+    features: Dict[str, List[float]], cfg: DKClassifierConfig
+) -> Dict[str, List[float]]:
+    if isinstance(cfg.features, str) and cfg.features == "all":
+        return features, list()
+
+    dataset_selected = {"cols": 0, "data": {}}
+    if isinstance(cfg.features, str):
+        start, end = cfg.features.split("-")
+        logger.info(f"Selecting features from {start} to {end}")
+        for key, value in features["data"].items():
+            dataset_selected["data"][key] = value[int(start) : int(end) + 1]
+        dataset_selected["cols"] = (int(end) + 1) - int(start)
+        selected_features = list(range(int(start), int(end) + 1))
+    else:
+        raise ValueError("cfg.features must be 'all' or a range like '0-12'")
+
+    return dataset_selected, selected_features
 
 
 def setup_data(source: str, target: str, cfg: DKClassifierConfig) -> Dict:
@@ -107,8 +129,7 @@ def main(cfg: DKClassifierConfig) -> None:
     logger.info("Starting training with config:")
     logger.info("\n" + OmegaConf.to_yaml(cfg))
 
-    data = prepare_data(cfg)
-    print(data)
+    data, selected_features = prepare_data(cfg)
 
     # Create and fit the model
     fit = fit_model(cfg, data)

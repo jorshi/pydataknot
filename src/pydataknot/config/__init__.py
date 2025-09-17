@@ -19,6 +19,7 @@ class DKClassifierConfig:
     scaler: Optional[ScalerConfig] = None
 
     data: str = MISSING
+    features: str = "all"  # "all" or "0-12" or [1, 2, ...]
 
     hydra: HydraConf = field(
         default_factory=lambda: HydraConf(
