@@ -3,7 +3,6 @@ CLI entry point for training the model.
 """
 
 import json
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import hydra
@@ -16,6 +15,7 @@ import torch
 
 from pydataknot.config import DKClassifierConfig
 from flucoma_torch.data import load_classifier_dateset, split_dataset_for_validation
+
 
 def prepare_data(cfg: DKClassifierConfig) -> None:
     logger.info(f"Preparing data with config:\n{cfg}")
@@ -116,27 +116,27 @@ def main(cfg: DKClassifierConfig) -> None:
     # Save the model
     logger.info("Training complete. Saving model...")
 
-    # # MLPClassifier needs labels corresponding to the onehot
-    # # prediction along with the model weights.
-    # model_dict = fit["mlp"].model.get_as_dict()
-    # labels_dict = {"labels": data["labels"], "rows": len(data["labels"])}
-    # classifier_dict = {
-    #     "labels": labels_dict,
-    #     "mlp": model_dict,
-    # }
+    # MLPClassifier needs labels corresponding to the onehot
+    # prediction along with the model weights.
+    model_dict = fit["mlp"].model.get_as_dict()
+    labels_dict = {"labels": data["labels"], "rows": len(data["labels"])}
+    classifier_dict = {
+        "labels": labels_dict,
+        "mlp": model_dict,
+    }
 
-    # model_path = "model.json"
-    # with open(model_path, "w") as f:
-    #     json.dump(classifier_dict, f, indent=4)
+    model_path = "model.json"
+    with open(model_path, "w") as f:
+        json.dump(classifier_dict, f, indent=4)
 
-    # logger.info(f"Model saved to {model_path}")
+    logger.info(f"Model saved to {model_path}")
 
-    # # Save the input scaler if it exists
-    # if data["scaler"]:
-    #     source_scaler_path = f"source_{data["scaler_name"]}.json"
-    #     with open(source_scaler_path, "w") as f:
-    #         json.dump(data["scaler"], f, indent=4)
-    #     logger.info(f"Source scaler saved to {source_scaler_path}")
+    # Save the input scaler if it exists
+    if data["scaler"]:
+        source_scaler_path = f"source_{data["scaler_name"]}.json"
+        with open(source_scaler_path, "w") as f:
+            json.dump(data["scaler"], f, indent=4)
+        logger.info(f"Source scaler saved to {source_scaler_path}")
 
 
 if __name__ == "__main__":
