@@ -12,9 +12,9 @@ from lightning.pytorch.callbacks import EarlyStopping
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 import torch
+from flucoma_torch.data import load_classifier_dateset, split_dataset_for_validation
 
 from pydataknot.config import DKClassifierConfig
-from flucoma_torch.data import load_classifier_dateset, split_dataset_for_validation
 
 
 def prepare_data(cfg: DKClassifierConfig) -> None:
