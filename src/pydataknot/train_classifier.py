@@ -15,6 +15,7 @@ import torch
 from flucoma_torch.data import load_classifier_dateset, split_dataset_for_validation
 
 from pydataknot.config import DKClassifierConfig
+from pydataknot.utils import get_scaler_name
 
 
 def prepare_data(cfg: DKClassifierConfig) -> None:
@@ -36,7 +37,7 @@ def prepare_data(cfg: DKClassifierConfig) -> None:
     with open(target_file, "w") as fp:
         json.dump(labelset, fp)
 
-    return setup_data(source_file, target_file, cfg), selected_features
+    return setup_data(source_file, target_file, cfg), selected_features, data
 
 
 def select_features(
@@ -129,7 +130,7 @@ def main(cfg: DKClassifierConfig) -> None:
     logger.info("Starting training with config:")
     logger.info("\n" + OmegaConf.to_yaml(cfg))
 
-    data, selected_features = prepare_data(cfg)
+    data, selected_features, output = prepare_data(cfg)
 
     # Create and fit the model
     fit = fit_model(cfg, data)
@@ -146,18 +147,22 @@ def main(cfg: DKClassifierConfig) -> None:
         "mlp": model_dict,
     }
 
-    model_path = "model.json"
-    with open(model_path, "w") as f:
-        json.dump(classifier_dict, f, indent=4)
+    output["meta"]["info"]["python_trained"] = 1
+    output["meta"]["info"]["mlp_trained"] = 0
+    output["pythonclassifier"] = classifier_dict
 
-    logger.info(f"Model saved to {model_path}")
-
-    # Save the input scaler if it exists
     if data["scaler"]:
-        source_scaler_path = f"source_{data["scaler_name"]}.json"
-        with open(source_scaler_path, "w") as f:
-            json.dump(data["scaler"], f, indent=4)
-        logger.info(f"Source scaler saved to {source_scaler_path}")
+        scaler_name = get_scaler_name(cfg.scaler)
+        output["meta"]["info"]["scaler"] = scaler_name
+        output["input_scaler"] = data["scaler"]
+
+    if len(selected_features) > 0:
+        output["meta"]["info"]["feature_select"] = 1
+        output["feature_select"] = selected_features
+
+    with open("trained_model.json", "w") as f:
+        # f.write(json_dump(output, indent=4))
+        json.dump(output, f, indent=4)
 
 
 if __name__ == "__main__":
