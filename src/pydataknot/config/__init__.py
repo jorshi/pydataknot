@@ -31,5 +31,11 @@ class DKClassifierConfig:
     )
 
 
+@dataclass
+class DKFeatureSelectConfig:
+    data: str = MISSING
+
+
 cs = ConfigStore.instance()
 cs.store(name="classifier_config", node=DKClassifierConfig)
+cs.store(name="feature_select_config", node=DKFeatureSelectConfig)

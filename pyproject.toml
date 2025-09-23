@@ -5,11 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "flucoma-torch>=0.1.3",
+    "flucoma-torch>=0.1.4",
 ]
 
 [project.scripts]
 pydk-train = "pydataknot:train_classifier.main"
+pydk-select-features = "pydataknot:feature_selection.main"
 
 [build-system]
 requires = ["hatchling"]

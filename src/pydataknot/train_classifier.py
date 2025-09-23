@@ -2,7 +2,6 @@
 CLI entry point for training the model.
 """
 
-import json
 from typing import Dict, List, Optional
 
 import hydra
@@ -15,29 +14,8 @@ import torch
 from flucoma_torch.data import load_classifier_dateset, split_dataset_for_validation
 
 from pydataknot.config import DKClassifierConfig
+from pydataknot.data import load_data
 from pydataknot.utils import get_scaler_name, json_dump
-
-
-def prepare_data(cfg: DKClassifierConfig) -> None:
-    logger.info(f"Preparing data with config:\n{cfg}")
-    source = hydra.utils.to_absolute_path(cfg.data)
-    with open(source, "r") as fp:
-        data = json.load(fp)
-
-    dataset = data["dataset"]
-    labelset = data["labelset"]
-
-    dataset, selected_features = select_features(dataset, cfg)
-
-    source_file = "source.json"
-    with open(source_file, "w") as fp:
-        json.dump(dataset, fp)
-
-    target_file = "target.json"
-    with open(target_file, "w") as fp:
-        json.dump(labelset, fp)
-
-    return setup_data(source_file, target_file, cfg), selected_features, data
 
 
 def select_features(
@@ -60,13 +38,13 @@ def select_features(
     return dataset_selected, selected_features
 
 
-def setup_data(source: str, target: str, cfg: DKClassifierConfig) -> Dict:
+def setup_data(source: Dict, target: Dict, cfg: DKClassifierConfig) -> Dict:
     # Load the dataset
     # TODO: split dataset into validation as well.
     scaler = instantiate(cfg.scaler) if cfg.scaler else None
     train_dataset, source_scaler, labels = load_classifier_dateset(
-        source_filename=source,
-        target_filename=target,
+        source_data=source,
+        target_data=target,
         scaler=scaler,
     )
     logger.info(f"Loaded dataset with {len(train_dataset)} samples.")
@@ -130,7 +108,9 @@ def main(cfg: DKClassifierConfig) -> None:
     logger.info("Starting training with config:")
     logger.info("\n" + OmegaConf.to_yaml(cfg))
 
-    data, selected_features, output = prepare_data(cfg)
+    dataset, labels, output = load_data(cfg)
+    dataset, selected_features = select_features(dataset, cfg)
+    data = setup_data(dataset, labels, cfg)
 
     # Create and fit the model
     fit = fit_model(cfg, data)
