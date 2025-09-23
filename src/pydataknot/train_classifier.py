@@ -15,7 +15,7 @@ import torch
 from flucoma_torch.data import load_classifier_dateset, split_dataset_for_validation
 
 from pydataknot.config import DKClassifierConfig
-from pydataknot.utils import get_scaler_name
+from pydataknot.utils import get_scaler_name, json_dump
 
 
 def prepare_data(cfg: DKClassifierConfig) -> None:
@@ -161,8 +161,7 @@ def main(cfg: DKClassifierConfig) -> None:
         output["feature_select"] = selected_features
 
     with open("trained_model.json", "w") as f:
-        # f.write(json_dump(output, indent=4))
-        json.dump(output, f, indent=4)
+        f.write(json_dump(output, indent=4))
 
 
 if __name__ == "__main__":
