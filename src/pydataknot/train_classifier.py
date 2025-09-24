@@ -19,21 +19,36 @@ from pydataknot.utils import get_scaler_name, json_dump
 
 
 def select_features(
-    features: Dict[str, List[float]], cfg: DKClassifierConfig
+    features: Dict[str, List[float]], dataset: Dict, cfg: DKClassifierConfig
 ) -> Dict[str, List[float]]:
-    if isinstance(cfg.features, str) and cfg.features == "all":
+    # Check for existing feature selection in dataset input
+    selected_features = []
+    has_prior_selection = 0
+    if "feature_select" in dataset["meta"]["info"]:
+        has_prior_selection = dataset["meta"]["info"]["feature_select"]
+        if has_prior_selection == 1:
+            logger.info(f"Found prior feature selection {dataset["feature_select"]}")
+            selected_features = dataset["feature_select"]
+
+    if cfg.features != "":
+        if has_prior_selection:
+            logger.warning("Prior feature selection in dataset will be overriddnen")
+
+        if cfg.features == "all":
+            logger.info("Using all features")
+            return features, list()
+        else:
+            start, end = cfg.features.split("-")
+            selected_features = list(range(int(start), int(end) + 1))
+            logger.info(f"Selecting features from {start} to {end}")
+
+    elif cfg.features == "" and not has_prior_selection:
         return features, list()
 
     dataset_selected = {"cols": 0, "data": {}}
-    if isinstance(cfg.features, str):
-        start, end = cfg.features.split("-")
-        logger.info(f"Selecting features from {start} to {end}")
-        for key, value in features["data"].items():
-            dataset_selected["data"][key] = value[int(start) : int(end) + 1]
-        dataset_selected["cols"] = (int(end) + 1) - int(start)
-        selected_features = list(range(int(start), int(end) + 1))
-    else:
-        raise ValueError("cfg.features must be 'all' or a range like '0-12'")
+    for key, value in features["data"].items():
+        dataset_selected["data"][key] = [value[i] for i in selected_features]
+        dataset_selected["cols"] = len(selected_features)
 
     return dataset_selected, selected_features
 
@@ -109,7 +124,7 @@ def main(cfg: DKClassifierConfig) -> None:
     logger.info("\n" + OmegaConf.to_yaml(cfg))
 
     dataset, labels, output = load_data(cfg)
-    dataset, selected_features = select_features(dataset, cfg)
+    dataset, selected_features = select_features(dataset, output, cfg)
     data = setup_data(dataset, labels, cfg)
 
     # Create and fit the model
