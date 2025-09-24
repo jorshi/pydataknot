@@ -15,6 +15,11 @@ pydk-train = "pydataknot:train_classifier.main"
 pydk-select = "pydataknot:feature_selection.main"
 pydk-optimize = "pydataknot:optimize_classifier.main"
 
+[project.optional-dependencies]
+dashboard = [
+    "optuna-dashboard>=0.19.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

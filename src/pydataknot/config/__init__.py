@@ -40,6 +40,7 @@ class DKOptimizeClassifierConfig:
 
     data: str = MISSING
     features: str = ""  # "all" or "0-12" or [1, 2, ...]
+    optimize_features: bool = False
 
     # Optuna specific config
     study_name: str = "classifier_study"

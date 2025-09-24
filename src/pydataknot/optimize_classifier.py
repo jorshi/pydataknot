@@ -6,19 +6,52 @@ from functools import partial
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
+from flucoma_torch.data import (
+    convert_fluid_dataset_to_tensor,
+    convert_fluid_labelset_to_tensor,
+)
 import hydra
+from hydra.utils import instantiate
 from loguru import logger
 from omegaconf import OmegaConf, DictConfig
 import optuna
 from optuna.artifacts import FileSystemArtifactStore
 from optuna.integration import PyTorchLightningPruningCallback
+import torch
 
 from pydataknot.config import DKOptimizeClassifierConfig
 from pydataknot.data import load_data
+import pydataknot.mrmr as mrmr
 from pydataknot.train_classifier import fit_model, select_features, setup_data
 from pydataknot.utils import save_trained_model
+
+
+def select_features_mrmr(
+    num_features: int, dataset: Dict, labels: Dict, cfg: DictConfig
+):
+    x = convert_fluid_dataset_to_tensor(dataset)
+    y, _ = convert_fluid_labelset_to_tensor(labels)
+    y = torch.argmax(y, dim=-1)
+
+    scaler = instantiate(cfg.scaler) if cfg.scaler else None
+    if scaler is not None:
+        logger.info(f"Scaling dataset with {str(scaler)}")
+        scaler.fit(x)
+        x = scaler.transform(x)
+
+    # Apply mRMR feature selection
+    relevancy, redundancy = mrmr.relevancy_redundancy_clssif(x, y)
+    selected_features = mrmr.select_features(num_features, relevancy, redundancy)
+    selected_features = sorted(selected_features)
+
+    dataset_selected = {"cols": 0, "data": {}}
+    for key, value in dataset["data"].items():
+        dataset_selected["data"][key] = [value[i] for i in selected_features]
+        dataset_selected["cols"] = len(selected_features)
+
+    return dataset_selected, selected_features
 
 
 def objective(
@@ -44,9 +77,19 @@ def objective(
     # Callback integration to enable optuna to prune trials
     callbacks = [PyTorchLightningPruningCallback(trial, monitor=metric)]
 
-    # Reload the data
+    # Reload the data and potentially study num features for mRMR
     dataset, labels, output = load_data(cfg)
-    dataset, selected_features = select_features(dataset, output, cfg)
+    if cfg.optimize_features:
+        if cfg.features != "":
+            raise ValueError(
+                "Manual feature selection not available with feature optimization"
+            )
+        num_features = trial.suggest_int("num_features", 1, dataset["cols"])
+        dataset, selected_features = select_features_mrmr(
+            num_features, dataset, labels, cfg
+        )
+    else:
+        dataset, selected_features = select_features(dataset, output, cfg)
     data = setup_data(dataset, labels, cfg)
 
     # Fit the model
@@ -54,8 +97,12 @@ def objective(
 
     # Save model artefacts
     if artifact_store is not None:
-        # Save the model json
-        model_dict = fit["mlp"].model.get_as_dict()
+        # Save the model json and selected features
+        model_dict = {
+            "mlp": fit["mlp"].model.get_as_dict(),
+            "selected_features": selected_features,
+            "scaler": data["scaler"],
+        }
         model_path = "model.json"
         with open("model.json", "w") as f:
             json.dump(model_dict, f)
@@ -131,8 +178,12 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     with open("best_model.json", "r") as fp:
         best_model = json.load(fp)
 
+    selected_features = best_model["selected_features"]
+    data["scaler"] = best_model["scaler"]
+    model_dict = best_model["mlp"]
+
     output_path = f"{Path(cfg.data).stem}_optimized.json"
-    save_trained_model(output_path, cfg, best_model, data, selected_features, output)
+    save_trained_model(output_path, cfg, model_dict, data, selected_features, output)
 
     # Remove temporary files
     os.remove("best_model.json")

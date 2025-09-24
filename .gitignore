@@ -10,3 +10,6 @@ wheels/
 .venv
 
 outputs/
+
+# Mac OSX
+.DS_Store

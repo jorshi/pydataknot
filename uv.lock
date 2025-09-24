@@ -166,6 +166,15 @@ wheels = [
 ]
 
 [[package]]
+name = "bottle"
+version = "0.13.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/71/cca6167c06d00c81375fd668719df245864076d284f7cb46a694cbeb5454/bottle-0.13.4.tar.gz", hash = "sha256:787e78327e12b227938de02248333d788cfe45987edca735f8f88e03472c3f47", size = 98717 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/f6/b55ec74cfe68c6584163faa311503c20b0da4c09883a41e8e00d6726c954/bottle-0.13.4-py2.py3-none-any.whl", hash = "sha256:045684fbd2764eac9cdeb824861d1551d113e8b683d8d26e296898d3dd99a12e", size = 103807 },
+]
+
+[[package]]
 name = "catalogue"
 version = "2.0.10"
 source = { registry = "https://pypi.org/simple" }
@@ -1332,6 +1341,21 @@ wheels = [
 ]
 
 [[package]]
+name = "optuna-dashboard"
+version = "0.19.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "bottle" },
+    { name = "optuna" },
+    { name = "packaging" },
+    { name = "scikit-learn" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/18/a5/17a3b28921c7badc29a357d119d13d23b4a7fc078370e105f2967de1b6dc/optuna_dashboard-0.19.0.tar.gz", hash = "sha256:07dc73a4a7b95ba2f45e20f404622f2684291024082e7ca1620d3db0dd4fa794", size = 8333686 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5c/96/c82e0486880cea107b2d368e910386a3b0ed787159e7399a61ca46ca6278/optuna_dashboard-0.19.0-py3-none-any.whl", hash = "sha256:d43da5676979f80552c9077005cce4cf77cafe05ae570071feb06222a3982cb4", size = 8354769 },
+]
+
+[[package]]
 name = "optuna-integration"
 version = "4.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1619,6 +1643,11 @@ dependencies = [
     { name = "scikit-learn" },
 ]
 
+[package.optional-dependencies]
+dashboard = [
+    { name = "optuna-dashboard" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pre-commit" },
@@ -1632,6 +1661,7 @@ dev = [
 requires-dist = [
     { name = "flucoma-torch", specifier = ">=0.1.4" },
     { name = "matplotlib", specifier = ">=3.9.4" },
+    { name = "optuna-dashboard", marker = "extra == 'dashboard'", specifier = ">=0.19.0" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
 ]
 
