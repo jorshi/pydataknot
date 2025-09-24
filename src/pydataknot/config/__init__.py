@@ -33,6 +33,33 @@ class DKClassifierConfig:
 
 
 @dataclass
+class DKOptimizeClassifierConfig:
+    defaults: List[Any] = field(default_factory=lambda: classifier_defaults)
+    mlp: MLPConfig = MISSING
+    scaler: Optional[ScalerConfig] = None
+
+    data: str = MISSING
+    features: str = ""  # "all" or "0-12" or [1, 2, ...]
+
+    # Optuna specific config
+    study_name: str = "classifier_study"
+    sqlite: bool = True
+    storage_name: str = "classifier_study"
+    n_trials: int = 100
+    n_startup_trials: int = 10  # Number trials before start checking to prune
+    n_warmup_steps: int = 100  # Number warm-up steps.
+
+    hydra: HydraConf = field(
+        default_factory=lambda: HydraConf(
+            run=RunDir(
+                dir="./outputs/${hydra.job.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+            ),
+            job=JobConf(chdir=True),
+        )
+    )
+
+
+@dataclass
 class DKFeatureSelectConfig:
     defaults: List[Any] = field(default_factory=lambda: feature_select_defaults)
     data: str = MISSING
@@ -53,3 +80,4 @@ class DKFeatureSelectConfig:
 cs = ConfigStore.instance()
 cs.store(name="classifier_config", node=DKClassifierConfig)
 cs.store(name="feature_select_config", node=DKFeatureSelectConfig)
+cs.store(name="optimize_classifier_config", node=DKOptimizeClassifierConfig)

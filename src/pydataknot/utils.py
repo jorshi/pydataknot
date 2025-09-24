@@ -1,5 +1,7 @@
 import json
-from typing import Any
+from typing import Any, Dict, List
+
+from omegaconf import DictConfig
 
 
 def json_dump(obj: Any, indent: int = 4) -> str:
@@ -50,3 +52,38 @@ def get_scaler_name(scaler_cfg: Any) -> str:
         raise ValueError(f"Unknown scaler name: {scaler_name}")
 
     return scaler_name
+
+
+def save_trained_model(
+    output_path: str,
+    cfg: DictConfig,
+    model_dict: Dict,
+    data: Dict,
+    selected_features: List,
+    output: Dict,
+):
+    # MLPClassifier needs labels corresponding to the onehot
+    # prediction along with the model weights.
+    labels_dict = {"labels": data["labels"], "rows": len(data["labels"])}
+    classifier_dict = {
+        "labels": labels_dict,
+        "mlp": model_dict,
+    }
+
+    if "mlp_trained" not in output["meta"]["info"]:
+        output["meta"]["info"]["mlp_trained"] = 0
+
+    output["meta"]["info"]["python_trained"] = 1
+    output["pythonclassifier"] = classifier_dict
+
+    if data["scaler"]:
+        scaler_name = get_scaler_name(cfg.scaler)
+        output["meta"]["info"]["scaler"] = scaler_name
+        output["input_scaler"] = data["scaler"]
+
+    if len(selected_features) > 0:
+        output["meta"]["info"]["feature_select"] = 1
+        output["feature_select"] = selected_features
+
+    with open(output_path, "w") as f:
+        f.write(json_dump(output, indent=4))

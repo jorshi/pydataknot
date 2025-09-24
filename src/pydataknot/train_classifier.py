@@ -16,7 +16,7 @@ from flucoma_torch.data import load_classifier_dateset, split_dataset_for_valida
 
 from pydataknot.config import DKClassifierConfig
 from pydataknot.data import load_data
-from pydataknot.utils import get_scaler_name, json_dump
+from pydataknot.utils import save_trained_model
 
 
 def select_features(
@@ -71,6 +71,7 @@ def setup_data(source: Dict, target: Dict, cfg: DKClassifierConfig) -> Dict:
     callbacks = []
     if val_ratio > 0.0:
         logger.info(f"Using a validation split ratio of {val_ratio}")
+        # TODO: add a seed for valdiation
         train_dataset, val_dataset = split_dataset_for_validation(
             train_dataset, val_ratio
         )
@@ -137,28 +138,8 @@ def main(cfg: DKClassifierConfig) -> None:
     # MLPClassifier needs labels corresponding to the onehot
     # prediction along with the model weights.
     model_dict = fit["mlp"].model.get_as_dict()
-    labels_dict = {"labels": data["labels"], "rows": len(data["labels"])}
-    classifier_dict = {
-        "labels": labels_dict,
-        "mlp": model_dict,
-    }
-
-    output["meta"]["info"]["python_trained"] = 1
-    output["meta"]["info"]["mlp_trained"] = 0
-    output["pythonclassifier"] = classifier_dict
-
-    if data["scaler"]:
-        scaler_name = get_scaler_name(cfg.scaler)
-        output["meta"]["info"]["scaler"] = scaler_name
-        output["input_scaler"] = data["scaler"]
-
-    if len(selected_features) > 0:
-        output["meta"]["info"]["feature_select"] = 1
-        output["feature_select"] = selected_features
-
-    output_name = Path(cfg.data).stem
-    with open(f"{output_name}_pytrained.json", "w") as f:
-        f.write(json_dump(output, indent=4))
+    output_path = f"{Path(cfg.data).stem}_pytrained.json"
+    save_trained_model(output_path, cfg, model_dict, data, selected_features, output)
 
 
 if __name__ == "__main__":
