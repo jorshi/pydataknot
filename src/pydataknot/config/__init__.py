@@ -10,6 +10,7 @@ from flucoma_torch.config.scaler import ScalerConfig
 
 regressor_defaults = ["_self_", {"mlp": "regressor"}, {"scaler": "normalize"}]
 classifier_defaults = ["_self_", {"mlp": "classifier"}, {"scaler": "normalize"}]
+feature_select_defaults = ["_self_", {"scaler": "normalize"}]
 
 
 @dataclass
@@ -33,7 +34,9 @@ class DKClassifierConfig:
 
 @dataclass
 class DKFeatureSelectConfig:
+    defaults: List[Any] = field(default_factory=lambda: feature_select_defaults)
     data: str = MISSING
+    scaler: Optional[ScalerConfig] = None
     num_features: int = 10
     plot: bool = False
 
