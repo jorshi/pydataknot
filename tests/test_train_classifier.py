@@ -35,8 +35,9 @@ def test_prepare_data(rundir):
         train_classifier.main(cfg)
 
         # Check output files
-        assert Path("trained_model.json").exists()
-        with open("trained_model.json") as f:
+        model_path = "snare_headrim_dataset_pytrained.json"
+        assert Path(model_path).exists()
+        with open(model_path) as f:
             trained_model = json.load(f)
 
         assert "pythonclassifier" in trained_model

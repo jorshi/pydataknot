@@ -12,7 +12,7 @@ dependencies = [
 
 [project.scripts]
 pydk-train = "pydataknot:train_classifier.main"
-pydk-select-features = "pydataknot:feature_selection.main"
+pydk-select = "pydataknot:feature_selection.main"
 
 [build-system]
 requires = ["hatchling"]

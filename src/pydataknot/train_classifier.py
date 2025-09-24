@@ -2,6 +2,7 @@
 CLI entry point for training the model.
 """
 
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import hydra
@@ -155,7 +156,8 @@ def main(cfg: DKClassifierConfig) -> None:
         output["meta"]["info"]["feature_select"] = 1
         output["feature_select"] = selected_features
 
-    with open("trained_model.json", "w") as f:
+    output_name = Path(cfg.data).stem
+    with open(f"{output_name}_pytrained.json", "w") as f:
         f.write(json_dump(output, indent=4))
 
 
