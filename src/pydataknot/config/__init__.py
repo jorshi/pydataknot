@@ -34,6 +34,17 @@ class DKClassifierConfig:
 @dataclass
 class DKFeatureSelectConfig:
     data: str = MISSING
+    num_features: int = 10
+    plot: bool = False
+
+    hydra: HydraConf = field(
+        default_factory=lambda: HydraConf(
+            run=RunDir(
+                dir="./outputs/${hydra.job.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+            ),
+            job=JobConf(chdir=True),
+        )
+    )
 
 
 cs = ConfigStore.instance()
