@@ -28,7 +28,7 @@ def select_features(
     if "feature_select" in dataset["meta"]["info"]:
         has_prior_selection = dataset["meta"]["info"]["feature_select"]
         if has_prior_selection == 1:
-            logger.info(f"Found prior feature selection {dataset["feature_select"]}")
+            logger.info(f"Found prior feature selection {dataset['feature_select']}")
             selected_features = dataset["feature_select"]
 
     if cfg.features != "":
