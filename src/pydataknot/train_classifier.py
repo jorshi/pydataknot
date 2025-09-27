@@ -78,7 +78,7 @@ def setup_data(source: Dict, target: Dict, cfg: DKClassifierConfig) -> Dict:
         val_dataloader = torch.utils.data.DataLoader(
             val_dataset, batch_size=cfg.mlp.batch_size, shuffle=False
         )
-        early_stopping = EarlyStopping("val_loss", patience=20)
+        early_stopping = EarlyStopping("val_loss", patience=100)
         callbacks.append(early_stopping)
 
     train_dataloader = torch.utils.data.DataLoader(

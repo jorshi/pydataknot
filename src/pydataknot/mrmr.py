@@ -12,7 +12,7 @@ def relevancy_redundancy_clssif(x: torch.Tensor, y: torch.Tensor):
     Get relevancy and redundancy data for classification data.
     """
     relevancy = torch.from_numpy(f_classif(x.numpy(), y.numpy())[0])
-    redundancy = torch.corrcoef(x)
+    redundancy = torch.corrcoef(x.T)
 
     assert relevancy.shape == (x.shape[-1],)
     assert redundancy.shape == (x.shape[-1], x.shape[-1])
