@@ -33,7 +33,12 @@ class DKOutlierDetectionConfig:
 
 
 @dataclass
-class DKFeatureSelectConfig:
+class DKBaseConfig:
+    filter_outliers: bool = True
+
+
+@dataclass
+class DKFeatureSelectConfig(DKBaseConfig):
     defaults: List[Any] = field(default_factory=lambda: feature_select_defaults)
     data: str = MISSING
     scaler: Optional[ScalerConfig] = None
@@ -51,7 +56,7 @@ class DKFeatureSelectConfig:
 
 
 @dataclass
-class DKClassifierConfig:
+class DKClassifierConfig(DKBaseConfig):
     defaults: List[Any] = field(default_factory=lambda: classifier_defaults)
     mlp: MLPConfig = MISSING
     scaler: Optional[ScalerConfig] = None
@@ -70,7 +75,7 @@ class DKClassifierConfig:
 
 
 @dataclass
-class DKOptimizeClassifierConfig:
+class DKOptimizeClassifierConfig(DKBaseConfig):
     defaults: List[Any] = field(default_factory=lambda: classifier_defaults)
     mlp: MLPConfig = MISSING
     scaler: Optional[ScalerConfig] = None
