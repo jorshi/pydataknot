@@ -80,6 +80,10 @@ def main(cfg: DKOutlierDetectionConfig):
     outliers = outliers.numpy()
     inliers = inliers.numpy()
 
+    logger.info(f"Found {len(outliers)} outliers.")
+    if len(outliers) > 0:
+        logger.info(f"Outlier data indices: {outliers}")
+
     if cfg.plot:
         save_outlier_plot(dataset, inliers, outliers)
 
