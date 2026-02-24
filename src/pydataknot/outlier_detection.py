@@ -1,8 +1,6 @@
 """
-Suggest features using Maximum Relevancy Minimum Redundancy
+Outlier detection applied to a training dataset
 """
-
-from pathlib import Path
 
 from flucoma_torch.data import (
     convert_fluid_dataset_to_tensor,
@@ -13,12 +11,12 @@ from hydra.utils import instantiate
 from loguru import logger
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.ensemble import IsolationForest
 import torch
 
 from pydataknot.config import DKFeatureSelectConfig
 from pydataknot.data import load_data
-import pydataknot.mrmr as mrmr
-from pydataknot.utils import json_dump
 
 
 def save_feature_plots(
@@ -45,13 +43,23 @@ def save_feature_plots(
     plt.savefig(f"{prefix}feature_redundancy.png", dpi=100)
 
 
-@hydra.main(version_base=None, config_name="feature_select_config")
+def save_outlier_plot(data: torch.Tensor, outliers: np.ndarray):
+    assert data.ndim == 2, "Data must be (num_points, dimensionality)"
+    data = data.numpy()
+    if data.shape[-1] > 2:
+        data = PCA().fit_transform(data)[:, :2]
+    elif data.shape[-1] < 2:
+        raise ValueError("Can't plot 1D dataset")
+
+    plt.scatter(data[:, 0], data[:, 1], c=outliers, cmap="viridis")
+    plt.savefig("outliers.png", dpi=100)
+
+
+@hydra.main(version_base=None, config_name="outlier_detection_config")
 def main(cfg: DKFeatureSelectConfig):
     dataset, labels, output = load_data(cfg)
     dataset = convert_fluid_dataset_to_tensor(dataset)
     labels, _ = convert_fluid_labelset_to_tensor(labels)
-
-    # Convert one-hot to integer class labels
     labels = torch.argmax(labels, dim=-1)
 
     scaler = instantiate(cfg.scaler) if cfg.scaler else None
@@ -60,30 +68,15 @@ def main(cfg: DKFeatureSelectConfig):
         scaler.fit(dataset)
         dataset = scaler.transform(dataset)
 
-    # Apply mRMR feature selection
-    relevancy, redundancy = mrmr.relevancy_redundancy_clssif(dataset, labels)
-    selected_features = mrmr.select_features(cfg.num_features, relevancy, redundancy)
-    logger.info(f"Selected features: {selected_features}")
+    # Apply outlier detection
+    outlier_detection = IsolationForest(
+        random_state=cfg.seed, n_estimators=cfg.num_estimators
+    )
+    outliers = outlier_detection.fit_predict(dataset.numpy())
+    print(np.where(outliers == -1))
 
-    selected_features = sorted(selected_features)
     if cfg.plot:
-        save_feature_plots(relevancy, redundancy, prefix="pre")
-        redundancy = redundancy[selected_features, :]
-        redundancy = redundancy[:, selected_features]
-        save_feature_plots(
-            relevancy[selected_features],
-            redundancy,
-            prefix="post",
-            features=selected_features,
-        )
-
-    # Add selected features to the incoming json file
-    output["meta"]["info"]["feature_select"] = 1
-    output["feature_select"] = selected_features
-
-    output_name = Path(cfg.data).stem
-    with open(f"{output_name}_feature_select.json", "w") as f:
-        f.write(json_dump(output, indent=4))
+        save_outlier_plot(dataset, outliers)
 
 
 if __name__ == "__main__":
