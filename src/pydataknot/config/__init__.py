@@ -10,7 +10,21 @@ from flucoma_torch.config.scaler import ScalerConfig
 
 outlier_detection_defaults = ["_self_", {"scaler": "normalize"}]
 feature_select_defaults = ["_self_", {"scaler": "normalize"}]
-classifier_defaults = ["_self_", {"mlp": "classifier"}, {"scaler": "normalize"}]
+classifier_defaults = ["_self_", {"mlp": "dk_classifier"}, {"scaler": "normalize"}]
+
+
+@dataclass
+class DKMLPConfig(MLPConfig):
+    _target_: str = "flucoma_torch.task.FluidMLPClassifier"
+    input_size: int = MISSING
+    output_size: int = MISSING
+    activation: int = 3
+    batch_size: int = 50
+    hidden_layers: list[int] = field(default_factory=lambda: [89, 74, 59, 44, 29])
+    learn_rate: float = 0.1
+    max_iter: int = 1000
+    momentum: float = 0.1
+    validation: float = 0.2
 
 
 @dataclass
@@ -103,6 +117,7 @@ class DKOptimizeClassifierConfig(DKBaseConfig):
 
 
 cs = ConfigStore.instance()
+cs.store(group="mlp", name="dk_classifier", node=DKMLPConfig)
 cs.store(name="outlier_detection_config", node=DKOutlierDetectionConfig)
 cs.store(name="feature_select_config", node=DKFeatureSelectConfig)
 cs.store(name="classifier_config", node=DKClassifierConfig)
