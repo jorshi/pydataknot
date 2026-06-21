@@ -8,7 +8,11 @@ from omegaconf import MISSING
 from flucoma_torch.config.model import MLPConfig
 from flucoma_torch.config.scaler import ScalerConfig
 
-outlier_detection_defaults = ["_self_", {"scaler": "normalize"}]
+outlier_detection_defaults = [
+    "_self_",
+    {"scaler": "normalize"},
+    {"outlier": "isolation_forest"},
+]
 feature_select_defaults = ["_self_", {"scaler": "normalize"}]
 classifier_defaults = ["_self_", {"mlp": "dk_classifier"}, {"scaler": "normalize"}]
 
@@ -28,12 +32,23 @@ class DKMLPConfig(MLPConfig):
 
 
 @dataclass
+class DKOutlierMethodConfig:
+    _target_: str = MISSING
+
+
+@dataclass
+class DKIsolationForestOutlierDetection(DKOutlierMethodConfig):
+    _target_: str = "pydataknot.outlier_detection.IsolationForestOutlierDetection"
+    random_state: int = 42
+    num_estimators: int = 1000
+
+
+@dataclass
 class DKOutlierDetectionConfig:
     defaults: List[Any] = field(default_factory=lambda: outlier_detection_defaults)
     data: str = MISSING
+    outlier: DKOutlierMethodConfig = MISSING
     scaler: Optional[ScalerConfig] = None
-    seed: int = 42
-    num_estimators: int = 1000
     plot: bool = False
 
     hydra: HydraConf = field(
@@ -117,6 +132,9 @@ class DKOptimizeClassifierConfig(DKBaseConfig):
 
 
 cs = ConfigStore.instance()
+cs.store(
+    group="outlier", name="isolation_forest", node=DKIsolationForestOutlierDetection
+)
 cs.store(group="mlp", name="dk_classifier", node=DKMLPConfig)
 cs.store(name="outlier_detection_config", node=DKOutlierDetectionConfig)
 cs.store(name="feature_select_config", node=DKFeatureSelectConfig)

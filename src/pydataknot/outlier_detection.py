@@ -3,7 +3,6 @@ Outlier detection applied to a training dataset
 """
 
 from pathlib import Path
-from typing import Tuple
 
 from flucoma_torch.data import (
     convert_fluid_dataset_to_tensor,
@@ -21,6 +20,32 @@ import torch
 from pydataknot.config import DKOutlierDetectionConfig
 from pydataknot.data import load_data
 from pydataknot.utils import json_dump
+
+
+class IsolationForestOutlierDetection:
+    """
+    Apply outlier detection using isolation forest
+
+    Liu, F. T., Ting, K. M., & Zhou, Z. H. (2008, December).
+    Isolation forest.
+    In 2008 8th IEEE International Conference on Data Mining (pp. 413-422). IEEE.
+    """
+
+    def __init__(self, random_state: int, num_estimators: int):
+        super().__init__()
+        self.random_state = random_state
+        self.num_estimators = num_estimators
+
+    def __call__(self, dataset: torch.Tensor):
+        # Apply outlier detection
+        dataset = dataset.numpy()
+        outlier_detection = IsolationForest(
+            random_state=self.random_state, n_estimators=self.num_estimators
+        )
+        outlier_scores = outlier_detection.fit_predict(dataset)
+        outliers = np.where(outlier_scores == -1)[0]
+        inliers = np.where(outlier_scores == 1)[0]
+        return torch.from_numpy(outliers), torch.from_numpy(inliers)
 
 
 def save_outlier_plot(data: np.ndarray, inliers: np.ndarray, outliers: np.ndarray):
@@ -41,27 +66,6 @@ def save_outlier_plot(data: np.ndarray, inliers: np.ndarray, outliers: np.ndarra
     plt.savefig("outliers.png", dpi=100)
 
 
-def outlier_detection(
-    dataset: torch.Tensor, cfg: DKOutlierDetectionConfig
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Apply outlier detection using isolation forest
-
-    Liu, F. T., Ting, K. M., & Zhou, Z. H. (2008, December).
-    Isolation forest.
-    In 2008 8th IEEE International Conference on Data Mining (pp. 413-422). IEEE.
-    """
-    # Apply outlier detection
-    dataset = dataset.numpy()
-    outlier_detection = IsolationForest(
-        random_state=cfg.seed, n_estimators=cfg.num_estimators
-    )
-    outlier_scores = outlier_detection.fit_predict(dataset)
-    outliers = np.where(outlier_scores == -1)[0]
-    inliers = np.where(outlier_scores == 1)[0]
-    return torch.from_numpy(outliers), torch.from_numpy(inliers)
-
-
 @hydra.main(version_base=None, config_name="outlier_detection_config")
 def main(cfg: DKOutlierDetectionConfig):
     dataset, labels, output = load_data(cfg)
@@ -75,7 +79,8 @@ def main(cfg: DKOutlierDetectionConfig):
         scaler.fit(dataset)
         dataset = scaler.transform(dataset)
 
-    outliers, inliers = outlier_detection(dataset, cfg)
+    outlier_detection = instantiate(cfg.outlier)
+    outliers, inliers = outlier_detection(dataset)
     dataset = dataset.numpy()
     outliers = outliers.numpy()
     inliers = inliers.numpy()
