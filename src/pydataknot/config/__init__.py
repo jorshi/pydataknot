@@ -15,6 +15,12 @@ outlier_detection_defaults = [
 ]
 feature_select_defaults = ["_self_", {"scaler": "normalize"}]
 classifier_defaults = ["_self_", {"mlp": "dk_classifier"}, {"scaler": "normalize"}]
+optimize_classifier_defaults = [
+    "_self_",
+    {"mlp": "dk_classifier"},
+    {"scaler": "normalize"},
+    {"outlier": "isolation_forest"},
+]
 
 
 @dataclass
@@ -26,7 +32,7 @@ class DKMLPConfig(MLPConfig):
     batch_size: int = 50
     hidden_layers: list[int] = field(default_factory=lambda: [89, 74, 59, 44, 29])
     learn_rate: float = 0.1
-    max_iter: int = 1000
+    max_iter: int = 10
     momentum: float = 0.1
     validation: float = 0.2
 
@@ -105,19 +111,20 @@ class DKClassifierConfig(DKBaseConfig):
 
 @dataclass
 class DKOptimizeClassifierConfig(DKBaseConfig):
-    defaults: List[Any] = field(default_factory=lambda: classifier_defaults)
+    defaults: List[Any] = field(default_factory=lambda: optimize_classifier_defaults)
     mlp: MLPConfig = MISSING
     scaler: Optional[ScalerConfig] = None
+    outlier: Optional[DKOutlierMethodConfig] = None
 
     data: str = MISSING
     features: str = ""  # "all" or "0-12" or [1, 2, ...]
-    optimize_features: bool = False
+    optimize_features: bool = True
 
     # Optuna specific config
     study_name: str = "classifier_study"
     sqlite: bool = True
     storage_name: str = "classifier_study"
-    n_trials: int = 100
+    n_trials: int = 10
     n_startup_trials: int = 10  # Number trials before start checking to prune
     n_warmup_steps: int = 100  # Number warm-up steps.
 
