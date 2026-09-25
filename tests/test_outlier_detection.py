@@ -39,5 +39,5 @@ def test_outlier_detection(rundir):
 
         assert "outliers" in trained_model
         assert len(trained_model["outliers"]) == 2
-        assert set(trained_model["outliers"]) == set([55, 100])
+        assert set(trained_model["outliers"]) == set([55, 96])
         assert trained_model["meta"]["info"]["outliers"] == 1

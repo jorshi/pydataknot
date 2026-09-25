@@ -8,11 +8,6 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 
-from flucoma_torch.data import (
-    convert_fluid_dataset_to_tensor,
-    convert_fluid_labelset_to_tensor,
-)
-from flucoma_torch.model import regressor_from_dict
 import hydra
 from hydra.utils import instantiate
 import lightning as L
@@ -24,7 +19,8 @@ from optuna.integration import PyTorchLightningPruningCallback
 import torch
 
 from pydataknot.config import DKOptimizeClassifierConfig
-from pydataknot.data import load_data
+import pydataknot.data as dkdata
+from pydataknot.model import regressor_from_dict
 import pydataknot.mrmr as mrmr
 from pydataknot.train_classifier import fit_model, select_features, setup_data
 from pydataknot.utils import save_trained_model, json_dump
@@ -33,8 +29,8 @@ from pydataknot.utils import save_trained_model, json_dump
 def select_features_mrmr(
     num_features: int, dataset: Dict, labels: Dict, cfg: DictConfig
 ):
-    x = convert_fluid_dataset_to_tensor(dataset)
-    y, _ = convert_fluid_labelset_to_tensor(labels)
+    x = dkdata.convert_fluid_dataset_to_tensor(dataset)
+    y, _ = dkdata.convert_fluid_labelset_to_tensor(labels)
     y = torch.argmax(y, dim=-1)
 
     scaler = instantiate(cfg.scaler) if cfg.scaler else None
@@ -80,7 +76,7 @@ def objective(
     callbacks = [PyTorchLightningPruningCallback(trial, monitor=metric)]
 
     # Reload the data and potentially study num features for mRMR
-    dataset, labels, output = load_data(cfg)
+    dataset, labels, output = dkdata.load_data(cfg)
     if cfg.optimize_features:
         if cfg.features != "":
             raise ValueError(
@@ -121,7 +117,7 @@ def objective(
 
 
 def perform_outlier_detection(dataset, outlier_detection, output, cfg):
-    dataset = convert_fluid_dataset_to_tensor(dataset)
+    dataset = dkdata.convert_fluid_dataset_to_tensor(dataset)
     outliers, inliers = outlier_detection(dataset)
     outliers = outliers.numpy()
 
@@ -146,7 +142,7 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     logger.info("Starting hyperparameter optimization with config:")
     logger.info("\n" + OmegaConf.to_yaml(cfg))
 
-    dataset, labels, output = load_data(cfg)
+    dataset, labels, output = dkdata.load_data(cfg)
 
     prev_outliers = getattr(output["meta"]["info"], "outliers", 0)
     outlier_detection = instantiate(cfg.outlier)
@@ -157,7 +153,7 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
         )
         cfg.data = tmp_data_path
         logger.info("Reloading data ...")
-        dataset, labels, output = load_data(cfg)
+        dataset, labels, output = dkdata.load_data(cfg)
 
     data = setup_data(dataset, labels, cfg)
 

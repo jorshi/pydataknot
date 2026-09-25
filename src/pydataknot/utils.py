@@ -43,8 +43,8 @@ def get_scaler_name(scaler_cfg: Any) -> str:
     target = scaler_cfg._target_
     if not isinstance(target, str):
         raise ValueError("_target_ must be a string")
-    if not target.startswith("flucoma_torch.scaler."):
-        raise ValueError("_target_ must start with 'flucoma_torch.scaler.'")
+    if not target.startswith("pydataknot.scaler."):
+        raise ValueError("_target_ must start with 'pydataknot.scaler.'")
 
     scaler_name = target.split(".")[-1].removeprefix("Fluid").lower()
     scaler_name = scaler_name.replace("scaler", "scale")

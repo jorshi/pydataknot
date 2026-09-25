@@ -5,8 +5,8 @@ from hydra.core.config_store import ConfigStore
 from hydra.conf import HydraConf, RunDir, JobConf
 from omegaconf import MISSING
 
-from flucoma_torch.config.model import MLPConfig
-from flucoma_torch.config.scaler import ScalerConfig
+from pydataknot.config.scaler import ScalerConfig
+
 
 outlier_detection_defaults = [
     "_self_",
@@ -24,8 +24,13 @@ optimize_classifier_defaults = [
 
 
 @dataclass
+class MLPConfig:
+    _target_: str = MISSING
+
+
+@dataclass
 class DKMLPConfig(MLPConfig):
-    _target_: str = "flucoma_torch.task.FluidMLPClassifier"
+    _target_: str = "pydataknot.task.FluidMLPClassifier"
     input_size: int = MISSING
     output_size: int = MISSING
     activation: int = 3

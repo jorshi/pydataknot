@@ -4,10 +4,6 @@ Outlier detection applied to a training dataset
 
 from pathlib import Path
 
-from flucoma_torch.data import (
-    convert_fluid_dataset_to_tensor,
-    convert_fluid_labelset_to_tensor,
-)
 import hydra
 from hydra.utils import instantiate
 from loguru import logger
@@ -18,7 +14,7 @@ from sklearn.ensemble import IsolationForest
 import torch
 
 from pydataknot.config import DKOutlierDetectionConfig
-from pydataknot.data import load_data
+import pydataknot.data as dkdata
 from pydataknot.utils import json_dump
 
 
@@ -68,9 +64,9 @@ def save_outlier_plot(data: np.ndarray, inliers: np.ndarray, outliers: np.ndarra
 
 @hydra.main(version_base=None, config_name="outlier_detection_config")
 def main(cfg: DKOutlierDetectionConfig):
-    dataset, labels, output = load_data(cfg)
-    dataset = convert_fluid_dataset_to_tensor(dataset)
-    labels, _ = convert_fluid_labelset_to_tensor(labels)
+    dataset, labels, output = dkdata.load_data(cfg)
+    dataset = dkdata.convert_fluid_dataset_to_tensor(dataset)
+    labels, _ = dkdata.convert_fluid_labelset_to_tensor(labels)
     labels = torch.argmax(labels, dim=-1)
 
     scaler = instantiate(cfg.scaler) if cfg.scaler else None
