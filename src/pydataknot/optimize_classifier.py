@@ -65,7 +65,7 @@ def objective(
 
     cfg.mlp.hidden_layers = layers
     cfg.mlp.activation = trial.suggest_int("activation", 0, 3)
-    cfg.mlp.batch_size = trial.suggest_categorical("batch_size", [2, 4, 8, 16, 32, 64])
+    cfg.mlp.batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64, 128])
     cfg.mlp.learn_rate = trial.suggest_float("lr", 1e-6, 1.0, log=True)
     cfg.mlp.momentum = trial.suggest_float("momentum", 0.0, 1.0)
 
@@ -220,19 +220,36 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     output["meta"]["info"]["feature_select"] = 1
     output["feature_select"] = selected_features
     dataset, selected_features = select_features(dataset, output, cfg)
-    data = setup_data(dataset, labels, cfg)
 
-    print(data["scaler"])
+    # cfg.mlp still holds the last trial's values -- restore the best trial's
+    # before building the dataloaders, which use the batch size.
+    params = trial.params
+    cfg.mlp.max_iter = 1000
+    cfg.mlp.learn_rate = params["lr"]
+    cfg.mlp.momentum = params["momentum"]
+    cfg.mlp.batch_size = params["batch_size"]
+    cfg.mlp.activation = params["activation"]
+    cfg.mlp.hidden_layers = [params[f"n_units_l{i}"] for i in range(params["n_layers"])]
+    data = setup_data(dataset, labels, cfg)
+    cfg.mlp.input_size = data["train_dataset"][0][0].shape[0]
+    cfg.mlp.output_size = data["train_dataset"][0][1].shape[0]
 
     model = regressor_from_dict(model_dict)
-    cfg.mlp.max_iter = 1000
-    cfg.mlp.learn_rate = trial.params["lr"]
-    cfg.mlp.momentum = trial.params["momentum"]
-    cfg.mlp.batch_size = trial.params["batch_size"]
+    print(cfg.mlp)
     mlp = instantiate(cfg.mlp)
     mlp.model = model
 
     trainer = L.Trainer(max_epochs=cfg.mlp.max_iter, callbacks=data["callbacks"])
+
+    # Sanity check -- the loaded model should reproduce the best trial's loss.
+    # Without a validation split the trial optimized train_loss, so check on the
+    # train set instead (reported by validate as val_loss).
+    check_dataloader = data["val_dataloader"] or data["train_dataloader"]
+    check_loss = trainer.validate(mlp, check_dataloader)[0]["val_loss"]
+    logger.info(
+        f"Loaded model loss: {check_loss:.6f} (best trial value: {trial.value:.6f})"
+    )
+
     logger.info("Starting training...")
     trainer.fit(mlp, data["train_dataloader"], val_dataloaders=data["val_dataloader"])
 

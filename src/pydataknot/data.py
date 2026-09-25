@@ -156,14 +156,19 @@ def load_classifier_dateset(
     return dataset, source_scaler_dict, target_labels
 
 
-def split_dataset_for_validation(dataset: FluidDataset, val_ratio: float):
+def split_dataset_for_validation(
+    dataset: FluidDataset, val_ratio: float, seed: int = 42
+):
     assert 0.0 < val_ratio < 1.0, "Expected val_ratio to be between 0.0 and 1.0"
 
     num_data = len(dataset)
     assert num_data > 1, "Expected a dataset with at least 2 items"
 
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+
     num_val = int(num_data * val_ratio)
-    idx = torch.randperm(num_data)
+    idx = torch.randperm(num_data, generator=generator)
     val_idx = idx[:num_val]
     train_idx = idx[num_val:]
     assert len(train_idx) + len(val_idx) == num_data

@@ -106,7 +106,9 @@ def get_layer(layer: Dict, init: bool = True):
     activation = get_activation(activation)
     linear = torch.nn.Linear(input_dims, output_dims)
     if init:
-        linear.weight.data = weights.T
+        # contiguous() is required -- MPS silently computes wrong results with the
+        # transposed (non-contiguous) view.
+        linear.weight.data = weights.T.contiguous()
         linear.bias.data = bias
     else:
         dev = math.sqrt(6.0 / (input_dims + output_dims))
