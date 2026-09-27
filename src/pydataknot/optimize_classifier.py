@@ -141,16 +141,14 @@ def perform_outlier_detection(dataset, outlier_detection, output, cfg):
 
 
 def print_hyperparameters(study: optuna.Study):
-    table = Table(title="Star Wars Movies")
+    table = Table(title="Optimized MLP Config")
 
-    table.add_column("Released", justify="right", style="cyan", no_wrap=True)
-    table.add_column("Title", style="magenta")
-    table.add_column("Box Office", justify="right", style="green")
+    table.add_column("Hyperparameter", justify="left", style="cyan", no_wrap=True)
+    table.add_column("Value", style="magenta")
 
-    table.add_row("Dec 20, 2019", "Star Wars: The Rise of Skywalker", "$952,110,690")
-    table.add_row("May 25, 2018", "Solo: A Star Wars Story", "$393,151,347")
-    table.add_row("Dec 15, 2017", "Star Wars Ep. V111: The Last Jedi", "$1,332,539,889")
-    table.add_row("Dec 16, 2016", "Rogue One: A Star Wars Story", "$1,332,439,889")
+    trial = study.best_trial
+    for key, value in trial.params.items():
+        table.add_row(key, str(value))
 
     console = Console()
     console.print(table)
@@ -218,18 +216,7 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     objective_func = partial(objective, cfg=cfg, artifact_store=artifact_store)
     study.optimize(objective_func, n_trials=cfg.n_trials)
 
-    # Report
-    # TODO: use rich to print this nicer
-    logger.info("Number of finished trials: {}".format(len(study.trials)))
-
-    logger.info("Best trial:")
-    trial = study.best_trial
-
-    logger.info("  Value: {}".format(trial.value))
-
-    logger.info("  Params: ")
-    for key, value in trial.params.items():
-        print("    {}: {}".format(key, value))
+    print_hyperparameters(study)
 
     # Get the best trained model
     best_artifact_id = study.best_trial.user_attrs.get("model_artifact_id")
@@ -260,7 +247,7 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
 
     # cfg.mlp still holds the last trial's values -- restore the best trial's
     # before building the dataloaders, which use the batch size.
-    params = trial.params
+    params = study.best_trial.params
     cfg.mlp.max_iter = 1000
     cfg.mlp.learn_rate = params["lr"]
     cfg.mlp.momentum = params["momentum"]
@@ -283,11 +270,17 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     check_dataloader = data["val_dataloader"] or data["train_dataloader"]
     check_loss = trainer.validate(mlp, check_dataloader)[0]["val_loss"]
     logger.info(
-        f"Loaded model loss: {check_loss:.6f} (best trial value: {trial.value:.6f})"
+        f"Loaded model loss: {check_loss:.6f} "
+        "(best trial value: {study.best_trial.value:.6f})"
     )
 
     logger.info("Starting training...")
     trainer.fit(mlp, data["train_dataloader"], val_dataloaders=data["val_dataloader"])
+
+    # Log the final results
+    print_hyperparameters(study)
+    logger.info("Final validation...")
+    check_loss = trainer.validate(mlp, check_dataloader)[0]["val_loss"]
 
     output_path = f"{Path(original_data_path).stem}_optimized.json"
     save_trained_model(output_path, cfg, model_dict, data, selected_features, output)
