@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=2.0.2",
     "optuna-integration[pytorch-lightning]>=5.0.0",
     "optuna>=4.5.0",
+    "rich>=15.0.0",
     "scikit-learn>=1.6.1",
     "torch>=2.8.0",
 ]

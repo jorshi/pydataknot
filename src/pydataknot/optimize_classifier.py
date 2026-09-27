@@ -4,6 +4,7 @@ Use optuna to optimize a classifier for a particular dataset.
 
 from functools import partial
 import json
+import math
 import os
 from pathlib import Path
 from typing import Dict, Optional
@@ -16,6 +17,8 @@ from omegaconf import OmegaConf, DictConfig
 import optuna
 from optuna.artifacts import FileSystemArtifactStore
 from optuna.integration import PyTorchLightningPruningCallback
+from rich.console import Console
+from rich.table import Table
 import torch
 
 from pydataknot.config import DKOptimizeClassifierConfig
@@ -70,7 +73,7 @@ def objective(
     cfg.mlp.momentum = trial.suggest_float("momentum", 0.0, 1.0)
 
     # Optimize on val loss if it is being used
-    metric = "val_loss" if cfg.mlp.validation > 0.0 else "train_loss"
+    metric = "val_acc" if cfg.mlp.validation > 0.0 else "train_loss"
 
     # Callback integration to enable optuna to prune trials
     callbacks = [PyTorchLightningPruningCallback(trial, monitor=metric)]
@@ -137,6 +140,22 @@ def perform_outlier_detection(dataset, outlier_detection, output, cfg):
     return Path(output_name).absolute()
 
 
+def print_hyperparameters(study: optuna.Study):
+    table = Table(title="Star Wars Movies")
+
+    table.add_column("Released", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Title", style="magenta")
+    table.add_column("Box Office", justify="right", style="green")
+
+    table.add_row("Dec 20, 2019", "Star Wars: The Rise of Skywalker", "$952,110,690")
+    table.add_row("May 25, 2018", "Solo: A Star Wars Story", "$393,151,347")
+    table.add_row("Dec 15, 2017", "Star Wars Ep. V111: The Last Jedi", "$1,332,539,889")
+    table.add_row("Dec 16, 2016", "Rogue One: A Star Wars Story", "$1,332,439,889")
+
+    console = Console()
+    console.print(table)
+
+
 @hydra.main(version_base=None, config_name="optimize_classifier_config")
 def main(cfg: DKOptimizeClassifierConfig) -> None:
     logger.info("Starting hyperparameter optimization with config:")
@@ -147,6 +166,7 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     prev_outliers = getattr(output["meta"]["info"], "outliers", 0)
     outlier_detection = instantiate(cfg.outlier)
     tmp_data_path = None
+    original_data_path = cfg.data
     if prev_outliers == 0 and outlier_detection is not None:
         tmp_data_path = perform_outlier_detection(
             dataset, outlier_detection, output, cfg
@@ -174,9 +194,25 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
         storage = Path(cfg.storage_name)
         storage = f"sqlite:///{storage}.sqlite3"
 
+    # If validation is preset optimize on validation accuracy
+    direction = "maximize" if cfg.mlp.validation > 0.0 else "minimize"
     study = optuna.create_study(
-        direction="minimize", pruner=pruner, storage=storage, study_name=cfg.study_name
+        direction=direction, pruner=pruner, storage=storage, study_name=cfg.study_name
     )
+
+    # Add default parameters as our current best guess
+    default_hyperparameters = {
+        "activation": cfg.mlp.activation,
+        "batch_size": 64,
+        "lr": cfg.mlp.learn_rate,
+        "momentum": cfg.mlp.momentum,
+        "n_layers": len(cfg.mlp.hidden_layers),
+        "num_features": data["train_dataset"][0][0].shape[0],
+    }
+    for i, layer in enumerate(cfg.mlp.hidden_layers):
+        default_hyperparameters[f"n_units_l{i}"] = 2 ** math.ceil(math.log2(layer))
+
+    study.enqueue_trial(default_hyperparameters)
 
     # Run the study
     objective_func = partial(objective, cfg=cfg, artifact_store=artifact_store)
@@ -213,8 +249,9 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     data["scaler"] = best_model["scaler"]
     model_dict = best_model["mlp"]
 
-    # ----
+    # ------
     # Starting deep run
+    # ------
 
     # Reload data ...
     output["meta"]["info"]["feature_select"] = 1
@@ -235,7 +272,6 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     cfg.mlp.output_size = data["train_dataset"][0][1].shape[0]
 
     model = regressor_from_dict(model_dict)
-    print(cfg.mlp)
     mlp = instantiate(cfg.mlp)
     mlp.model = model
 
@@ -253,15 +289,11 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     logger.info("Starting training...")
     trainer.fit(mlp, data["train_dataloader"], val_dataloaders=data["val_dataloader"])
 
-    print(mlp)
-    assert False
-
-    print(best_model.keys())
-    print(selected_features)
-
-    output_path = f"{Path(cfg.data).stem}_optimized.json"
+    output_path = f"{Path(original_data_path).stem}_optimized.json"
     save_trained_model(output_path, cfg, model_dict, data, selected_features, output)
 
     # Remove temporary files
     os.remove("best_model.json")
     os.remove("model.json")
+    if tmp_data_path is not None:
+        os.remove(tmp_data_path)
