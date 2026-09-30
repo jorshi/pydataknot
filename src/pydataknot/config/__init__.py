@@ -34,12 +34,14 @@ class DKMLPConfig(MLPConfig):
     input_size: int = MISSING
     output_size: int = MISSING
     activation: int = 3
-    batch_size: int = 50
+    batch_size: int = 64
     hidden_layers: list[int] = field(default_factory=lambda: [89, 74, 59, 44, 29])
-    learn_rate: float = 0.1
+    learn_rate: float = 0.001
     max_iter: int = 10
     momentum: float = 0.1
     validation: float = 0.2
+    optimizer: str = "adam"
+    loss_fn: str = "bce"
 
 
 @dataclass

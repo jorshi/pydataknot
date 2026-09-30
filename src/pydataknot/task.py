@@ -2,7 +2,7 @@
 Lightning tasks for FluCoMa MLPs
 """
 
-from typing import List
+from typing import List, Literal
 
 import lightning as L
 from sklearn.metrics import accuracy_score
@@ -28,6 +28,7 @@ class FluidMLPRegressor(L.LightningModule):
         validation: float = 0.2,
         batch_size: int = 32,
         momentum: float = 0.9,
+        optimizer: Literal["sgd", "adam"] = "sgd",
     ):
         super().__init__()
         self.model = FluidMLP(
@@ -42,6 +43,7 @@ class FluidMLPRegressor(L.LightningModule):
         self.validation = validation
         self.batch_size = batch_size
         self.momentum = momentum
+        self.optimizer_ = optimizer
         self.loss_function = torch.nn.MSELoss()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -85,12 +87,21 @@ class FluidMLPRegressor(L.LightningModule):
         """
         Configure the optimizer for training.
         """
-        optimizer = torch.optim.SGD(
-            self.model.parameters(),
-            lr=self.learn_rate,
-            momentum=self.momentum,
-        )
-        return optimizer
+        if self.optimizer_ == "sgd":
+            return torch.optim.SGD(
+                self.model.parameters(),
+                lr=self.learn_rate,
+                momentum=self.momentum,
+            )
+        elif self.optimizer_ == "adam":
+            return torch.optim.Adam(
+                self.model.parameters(),
+                lr=self.learn_rate,
+            )
+        else:
+            raise ValueError(
+                f"Unknown optimizer {self.optimizer_}, must be 'sgd' or 'adam'"
+            )
 
 
 class FluidMLPClassifier(FluidMLPRegressor):
@@ -111,6 +122,8 @@ class FluidMLPClassifier(FluidMLPRegressor):
         validation: float = 0.2,
         batch_size: int = 32,
         momentum: float = 0.9,
+        optimizer: Literal["sgd", "adam"] = "sgd",
+        loss_fn: Literal["mse", "bce"] = "mse",
     ):
         super().__init__(
             input_size=input_size,
@@ -123,7 +136,16 @@ class FluidMLPClassifier(FluidMLPRegressor):
             validation=validation,
             batch_size=batch_size,
             momentum=momentum,
+            optimizer=optimizer,
         )
+        if loss_fn == "mse":
+            self.loss_function = torch.nn.MSELoss()
+        elif loss_fn == "bce":
+            self.loss_function = torch.nn.BCELoss()
+        else:
+            raise ValueError(
+                f"Unsupported loss function: {loss_fn}. Must be one of 'mse' or 'bce'"
+            )
 
     def validation_step(self, batch, batch_idx):
         """
@@ -136,11 +158,9 @@ class FluidMLPClassifier(FluidMLPRegressor):
         # Compute loss
         loss = self.loss_function(y_hat, y)
 
-        # Copmute accuracy
+        # Compute accuracy
         y_hat = torch.argmax(y_hat, dim=-1, keepdim=False)
-
         y = torch.argmax(y, dim=-1)
-
         acc = accuracy_score(y_hat.cpu().numpy(), y.cpu().numpy(), normalize=True)
 
         # Log the validation loss

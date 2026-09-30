@@ -70,7 +70,8 @@ def objective(
     cfg.mlp.activation = trial.suggest_int("activation", 0, 3)
     cfg.mlp.batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64, 128])
     cfg.mlp.learn_rate = trial.suggest_float("lr", 1e-6, 1.0, log=True)
-    cfg.mlp.momentum = trial.suggest_float("momentum", 0.0, 1.0)
+    if cfg.mlp.optimizer == "sgd":
+        cfg.mlp.momentum = trial.suggest_float("momentum", 0.0, 1.0)
 
     # Optimize on val loss if it is being used
     metric = "val_acc" if cfg.mlp.validation > 0.0 else "train_loss"
