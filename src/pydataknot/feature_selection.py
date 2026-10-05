@@ -50,6 +50,8 @@ def main(cfg: DKFeatureSelectConfig):
     dataset, labels, output = load_data(cfg)
     dataset = convert_fluid_dataset_to_tensor(dataset)
     labels, _ = convert_fluid_labelset_to_tensor(labels)
+
+    # Convert one-hot to integer class labels
     labels = torch.argmax(labels, dim=-1)
 
     scaler = instantiate(cfg.scaler) if cfg.scaler else None

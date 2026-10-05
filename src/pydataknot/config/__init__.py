@@ -8,13 +8,69 @@ from omegaconf import MISSING
 from flucoma_torch.config.model import MLPConfig
 from flucoma_torch.config.scaler import ScalerConfig
 
-regressor_defaults = ["_self_", {"mlp": "regressor"}, {"scaler": "normalize"}]
-classifier_defaults = ["_self_", {"mlp": "classifier"}, {"scaler": "normalize"}]
+outlier_detection_defaults = ["_self_", {"scaler": "normalize"}]
 feature_select_defaults = ["_self_", {"scaler": "normalize"}]
+classifier_defaults = ["_self_", {"mlp": "dk_classifier"}, {"scaler": "normalize"}]
 
 
 @dataclass
-class DKClassifierConfig:
+class DKMLPConfig(MLPConfig):
+    _target_: str = "flucoma_torch.task.FluidMLPClassifier"
+    input_size: int = MISSING
+    output_size: int = MISSING
+    activation: int = 3
+    batch_size: int = 50
+    hidden_layers: list[int] = field(default_factory=lambda: [89, 74, 59, 44, 29])
+    learn_rate: float = 0.1
+    max_iter: int = 1000
+    momentum: float = 0.1
+    validation: float = 0.2
+
+
+@dataclass
+class DKOutlierDetectionConfig:
+    defaults: List[Any] = field(default_factory=lambda: outlier_detection_defaults)
+    data: str = MISSING
+    scaler: Optional[ScalerConfig] = None
+    seed: int = 42
+    num_estimators: int = 1000
+    plot: bool = False
+
+    hydra: HydraConf = field(
+        default_factory=lambda: HydraConf(
+            run=RunDir(
+                dir="./outputs/${hydra.job.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+            ),
+            job=JobConf(chdir=True),
+        )
+    )
+
+
+@dataclass
+class DKBaseConfig:
+    filter_outliers: bool = True
+
+
+@dataclass
+class DKFeatureSelectConfig(DKBaseConfig):
+    defaults: List[Any] = field(default_factory=lambda: feature_select_defaults)
+    data: str = MISSING
+    scaler: Optional[ScalerConfig] = None
+    num_features: int = 10
+    plot: bool = False
+
+    hydra: HydraConf = field(
+        default_factory=lambda: HydraConf(
+            run=RunDir(
+                dir="./outputs/${hydra.job.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+            ),
+            job=JobConf(chdir=True),
+        )
+    )
+
+
+@dataclass
+class DKClassifierConfig(DKBaseConfig):
     defaults: List[Any] = field(default_factory=lambda: classifier_defaults)
     mlp: MLPConfig = MISSING
     scaler: Optional[ScalerConfig] = None
@@ -33,7 +89,7 @@ class DKClassifierConfig:
 
 
 @dataclass
-class DKOptimizeClassifierConfig:
+class DKOptimizeClassifierConfig(DKBaseConfig):
     defaults: List[Any] = field(default_factory=lambda: classifier_defaults)
     mlp: MLPConfig = MISSING
     scaler: Optional[ScalerConfig] = None
@@ -60,25 +116,9 @@ class DKOptimizeClassifierConfig:
     )
 
 
-@dataclass
-class DKFeatureSelectConfig:
-    defaults: List[Any] = field(default_factory=lambda: feature_select_defaults)
-    data: str = MISSING
-    scaler: Optional[ScalerConfig] = None
-    num_features: int = 10
-    plot: bool = False
-
-    hydra: HydraConf = field(
-        default_factory=lambda: HydraConf(
-            run=RunDir(
-                dir="./outputs/${hydra.job.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}"
-            ),
-            job=JobConf(chdir=True),
-        )
-    )
-
-
 cs = ConfigStore.instance()
-cs.store(name="classifier_config", node=DKClassifierConfig)
+cs.store(group="mlp", name="dk_classifier", node=DKMLPConfig)
+cs.store(name="outlier_detection_config", node=DKOutlierDetectionConfig)
 cs.store(name="feature_select_config", node=DKFeatureSelectConfig)
+cs.store(name="classifier_config", node=DKClassifierConfig)
 cs.store(name="optimize_classifier_config", node=DKOptimizeClassifierConfig)

@@ -14,6 +14,7 @@ dependencies = [
 pydk-train = "pydataknot:train_classifier.main"
 pydk-select = "pydataknot:feature_selection.main"
 pydk-optimize = "pydataknot:optimize_classifier.main"
+pydk-outlier = "pydataknot:outlier_detection.main"
 
 [project.optional-dependencies]
 dashboard = [

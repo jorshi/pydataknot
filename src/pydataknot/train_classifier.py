@@ -33,7 +33,7 @@ def select_features(
 
     if cfg.features != "":
         if has_prior_selection:
-            logger.warning("Prior feature selection in dataset will be overriddnen")
+            logger.warning("Prior feature selection in dataset will be overridden")
 
         if cfg.features == "all":
             logger.info("Using all features")
