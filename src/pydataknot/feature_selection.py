@@ -4,10 +4,6 @@ Suggest features using Maximum Relevancy Minimum Redundancy
 
 from pathlib import Path
 
-from flucoma_torch.data import (
-    convert_fluid_dataset_to_tensor,
-    convert_fluid_labelset_to_tensor,
-)
 import hydra
 from hydra.utils import instantiate
 from loguru import logger
@@ -16,7 +12,7 @@ import numpy as np
 import torch
 
 from pydataknot.config import DKFeatureSelectConfig
-from pydataknot.data import load_data
+import pydataknot.data as data
 import pydataknot.mrmr as mrmr
 from pydataknot.utils import json_dump
 
@@ -47,9 +43,9 @@ def save_feature_plots(
 
 @hydra.main(version_base=None, config_name="feature_select_config")
 def main(cfg: DKFeatureSelectConfig):
-    dataset, labels, output = load_data(cfg)
-    dataset = convert_fluid_dataset_to_tensor(dataset)
-    labels, _ = convert_fluid_labelset_to_tensor(labels)
+    dataset, labels, output = data.load_data(cfg)
+    dataset = data.convert_fluid_dataset_to_tensor(dataset)
+    labels, _ = data.convert_fluid_labelset_to_tensor(labels)
 
     # Convert one-hot to integer class labels
     labels = torch.argmax(labels, dim=-1)

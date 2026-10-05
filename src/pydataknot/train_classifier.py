@@ -12,10 +12,9 @@ from lightning.pytorch.callbacks import EarlyStopping
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 import torch
-from flucoma_torch.data import load_classifier_dateset, split_dataset_for_validation
 
 from pydataknot.config import DKClassifierConfig
-from pydataknot.data import load_data
+import pydataknot.data as dkdata
 from pydataknot.utils import save_trained_model
 
 
@@ -58,7 +57,7 @@ def setup_data(source: Dict, target: Dict, cfg: DKClassifierConfig) -> Dict:
     # Load the dataset
     # TODO: split dataset into validation as well.
     scaler = instantiate(cfg.scaler) if cfg.scaler else None
-    train_dataset, source_scaler, labels = load_classifier_dateset(
+    train_dataset, source_scaler, labels = dkdata.load_classifier_dateset(
         source_data=source,
         target_data=target,
         scaler=scaler,
@@ -72,7 +71,7 @@ def setup_data(source: Dict, target: Dict, cfg: DKClassifierConfig) -> Dict:
     if val_ratio > 0.0:
         logger.info(f"Using a validation split ratio of {val_ratio}")
         # TODO: add a seed for valdiation
-        train_dataset, val_dataset = split_dataset_for_validation(
+        train_dataset, val_dataset = dkdata.split_dataset_for_validation(
             train_dataset, val_ratio
         )
         val_dataloader = torch.utils.data.DataLoader(
@@ -125,7 +124,7 @@ def main(cfg: DKClassifierConfig) -> None:
     logger.info("Starting training with config:")
     logger.info("\n" + OmegaConf.to_yaml(cfg))
 
-    dataset, labels, output = load_data(cfg)
+    dataset, labels, output = dkdata.load_data(cfg)
     dataset, selected_features = select_features(dataset, output, cfg)
     data = setup_data(dataset, labels, cfg)
 
@@ -137,7 +136,7 @@ def main(cfg: DKClassifierConfig) -> None:
 
     # MLPClassifier needs labels corresponding to the onehot
     # prediction along with the model weights.
-    model_dict = fit["mlp"].model.get_as_dict()
+    model_dict = fit["mlp"].model.to_dict()
     output_path = f"{Path(cfg.data).stem}_pytrained.json"
     save_trained_model(output_path, cfg, model_dict, data, selected_features, output)
 
