@@ -36,7 +36,7 @@ class DKMLPConfig(MLPConfig):
     activation: int = 3
     batch_size: int = 64
     hidden_layers: list[int] = field(default_factory=lambda: [89, 74, 59, 44, 29])
-    learn_rate: float = 0.001
+    learn_rate: float = 0.01
     max_iter: int = 10
     momentum: float = 0.1
     validation: float = 0.2
@@ -134,6 +134,9 @@ class DKOptimizeClassifierConfig(DKBaseConfig):
     n_trials: int = 10
     n_startup_trials: int = 10  # Number trials before start checking to prune
     n_warmup_steps: int = 100  # Number warm-up steps.
+
+    # Perform a deep model training after optimization
+    deep_run: bool = True
 
     hydra: HydraConf = field(
         default_factory=lambda: HydraConf(

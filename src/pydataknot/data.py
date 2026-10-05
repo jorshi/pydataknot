@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import hydra
 from loguru import logger
 from omegaconf import DictConfig
+from sklearn.model_selection import train_test_split
 import torch
 
 from pydataknot.scaler import FluidBaseScaler
@@ -157,28 +158,29 @@ def load_classifier_dateset(
 
 
 def split_dataset_for_validation(
-    dataset: FluidDataset, val_ratio: float, seed: int = 42
+    dataset: FluidDataset, val_ratio: float, seed: int = 42, stratify: bool = False
 ):
+    # Make sure to do a class-balanced split!
+
     assert 0.0 < val_ratio < 1.0, "Expected val_ratio to be between 0.0 and 1.0"
 
     num_data = len(dataset)
     assert num_data > 1, "Expected a dataset with at least 2 items"
 
-    generator = torch.Generator()
-    generator.manual_seed(seed)
+    x = dataset.source.numpy()
+    y = dataset.target.numpy()
 
-    num_val = int(num_data * val_ratio)
-    idx = torch.randperm(num_data, generator=generator)
-    val_idx = idx[:num_val]
-    train_idx = idx[num_val:]
-    assert len(train_idx) + len(val_idx) == num_data
+    classes = y.argmax(axis=-1) if stratify else None
+    x_train, x_test, y_train, y_test = train_test_split(
+        x, y, test_size=val_ratio, random_state=seed, shuffle=True, stratify=classes
+    )
 
     train_dataset = FluidDataset(
-        source=dataset.source[train_idx], target=dataset.target[train_idx]
+        source=torch.from_numpy(x_train), target=torch.from_numpy(y_train)
     )
 
     val_dataset = FluidDataset(
-        source=dataset.source[val_idx], target=dataset.target[val_idx]
+        source=torch.from_numpy(x_test), target=torch.from_numpy(y_test)
     )
 
     return train_dataset, val_dataset

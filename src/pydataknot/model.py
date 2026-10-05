@@ -1,6 +1,7 @@
 import json
 import math
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, Union
 
 import torch
 
@@ -41,12 +42,12 @@ class FluidMLP(torch.nn.Module):
     def forward(self, x):
         return self.model(x)
 
-    def get_as_dict(self) -> Dict:
+    def to_dict(self) -> Dict:
         """
         Get the model parameters as a dictionary.
         """
         layers = []
-        for i, layer in enumerate(self.model.modules()):
+        for layer in self.model.modules():
             if isinstance(layer, torch.nn.Linear):
                 layers.append(
                     {
@@ -65,11 +66,56 @@ class FluidMLP(torch.nn.Module):
 
         return {"layers": layers}
 
+    @classmethod
+    def from_dict(cls, model_dict: Dict):
+        layers = model_dict["layers"]
+        activation = {layer["activation"] for layer in layers[:-1]}
+        if len(activation) != 1:
+            raise ValueError("FluidMLP reques one activation for all hidden layers")
+
+        mlp = cls(
+            input_size=layers[0]["rows"],
+            hidden_layers=[layer["cols"] for layer in layers[:-1]],
+            output_size=layers[-1]["cols"],
+            activation=activation.pop(),
+            output_activation=layers[-1]["activation"],
+        )
+
+        mlp.load_weights_from_dict(model_dict)
+        return mlp
+
+    def load_weights_from_dict(self, model_dict: Dict):
+        layers = model_dict["layers"]
+        idx = 0
+        for layer in self.modules():
+            if isinstance(layer, FluidLinear):
+                weights = torch.tensor(layers[idx]["weights"]).T.contiguous()
+                bias = torch.tensor(layers[idx]["biases"])
+                assert weights.shape == layer.linear.weight.data.shape
+                assert bias.shape == layer.linear.bias.data.shape
+                layer.linear.weight.data = weights
+                layer.linear.bias.data = bias
+                idx += 1
+
+        assert idx == len(layers)
+
+    @classmethod
+    def load(cls, path: Union[Path, str], python_trained: bool = False):
+        with open(Path(path), "r") as fp:
+            model_dict = json.load(fp)
+
+        if python_trained:
+            pass
+        else:
+            model_dict = model_dict["mlpclassifier"]["mlp"]
+
+        return cls.from_dict(model_dict)
+
     def save(self, path: str):
         """
         Save the model parameters to a Fluid dictionary format.
         """
-        fluid_dict = self.get_as_dict()
+        fluid_dict = self.to_dict()
         with open(path, "w") as f:
             json.dump(fluid_dict, f, indent=4)
 
@@ -104,16 +150,12 @@ def get_layer(layer: Dict, init: bool = True):
     bias = torch.tensor(layer["biases"])
 
     activation = get_activation(activation)
-    linear = torch.nn.Linear(input_dims, output_dims)
+    linear = FluidLinear(input_dims, output_dims)
     if init:
         # contiguous() is required -- MPS silently computes wrong results with the
         # transposed (non-contiguous) view.
-        linear.weight.data = weights.T.contiguous()
-        linear.bias.data = bias
-    else:
-        dev = math.sqrt(6.0 / (input_dims + output_dims))
-        linear.weight.data = (torch.rand_like(weights.T) * 2.0 - 1.0) * dev
-        linear.bias.data = torch.zeros_like(bias)
+        linear.linear.weight.data = weights.T.contiguous()
+        linear.linear.bias.data = bias
 
     return linear, activation
 

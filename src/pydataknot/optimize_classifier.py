@@ -25,6 +25,7 @@ from pydataknot.config import DKOptimizeClassifierConfig
 import pydataknot.data as dkdata
 from pydataknot.model import regressor_from_dict
 import pydataknot.mrmr as mrmr
+from pydataknot.task import FluidMLPClassifier
 from pydataknot.train_classifier import fit_model, select_features, setup_data
 from pydataknot.utils import save_trained_model, json_dump
 
@@ -217,8 +218,6 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     objective_func = partial(objective, cfg=cfg, artifact_store=artifact_store)
     study.optimize(objective_func, n_trials=cfg.n_trials)
 
-    print_hyperparameters(study)
-
     # Get the best trained model
     best_artifact_id = study.best_trial.user_attrs.get("model_artifact_id")
     download_path = Path("best_model.json")
@@ -237,51 +236,66 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     data["scaler"] = best_model["scaler"]
     model_dict = best_model["mlp"]
 
-    # ------
-    # Starting deep run
-    # ------
-
     # Reload data ...
     output["meta"]["info"]["feature_select"] = 1
     output["feature_select"] = selected_features
     dataset, selected_features = select_features(dataset, output, cfg)
+    data = setup_data(dataset, labels, cfg)
 
-    # cfg.mlp still holds the last trial's values -- restore the best trial's
-    # before building the dataloaders, which use the batch size.
+    # Reconstruct the best model object from config
     params = study.best_trial.params
     cfg.mlp.max_iter = 1000
     cfg.mlp.learn_rate = params["lr"]
-    cfg.mlp.momentum = params["momentum"]
+    if cfg.mlp.optimizer == "sgd":
+        cfg.mlp.momentum = params["momentum"]
     cfg.mlp.batch_size = params["batch_size"]
     cfg.mlp.activation = params["activation"]
     cfg.mlp.hidden_layers = [params[f"n_units_l{i}"] for i in range(params["n_layers"])]
-    data = setup_data(dataset, labels, cfg)
     cfg.mlp.input_size = data["train_dataset"][0][0].shape[0]
     cfg.mlp.output_size = data["train_dataset"][0][1].shape[0]
 
     model = regressor_from_dict(model_dict)
-    mlp = instantiate(cfg.mlp)
+    mlp: FluidMLPClassifier = instantiate(cfg.mlp)
     mlp.model = model
 
-    trainer = L.Trainer(max_epochs=cfg.mlp.max_iter, callbacks=data["callbacks"])
+    # ------
+    # Starting deep run
+    # ------
+    if cfg.deep_run:
+        logger.info("Starting a longer training with best model...")
 
-    # Sanity check -- the loaded model should reproduce the best trial's loss.
-    # Without a validation split the trial optimized train_loss, so check on the
-    # train set instead (reported by validate as val_loss).
-    check_dataloader = data["val_dataloader"] or data["train_dataloader"]
-    check_loss = trainer.validate(mlp, check_dataloader)[0]["val_loss"]
-    logger.info(
-        f"Loaded model loss: {check_loss:.6f} "
-        "(best trial value: {study.best_trial.value:.6f})"
-    )
+        # Reload data ...
+        output["meta"]["info"]["feature_select"] = 1
+        output["feature_select"] = selected_features
+        dataset, selected_features = select_features(dataset, output, cfg)
 
-    logger.info("Starting training...")
-    trainer.fit(mlp, data["train_dataloader"], val_dataloaders=data["val_dataloader"])
+        trainer = L.Trainer(max_epochs=cfg.mlp.max_iter, callbacks=data["callbacks"])
+
+        # Sanity check -- the loaded model should reproduce the best trial's loss.
+        # Without a validation split the trial optimized train_loss, so check on the
+        # train set instead (reported by validate as val_loss).
+        check_dataloader = data["val_dataloader"] or data["train_dataloader"]
+        check_loss = trainer.validate(mlp, check_dataloader)[0]["val_loss"]
+        logger.info(
+            f"Loaded model loss: {check_loss:.6f} "
+            "(best trial value: {study.best_trial.value:.6f})"
+        )
+
+        logger.info("Starting training...")
+        trainer.fit(
+            mlp, data["train_dataloader"], val_dataloaders=data["val_dataloader"]
+        )
+
+        # Create a new model_dict to save
+        model_dict = mlp.model.to_dict()
 
     # Log the final results
     print_hyperparameters(study)
     logger.info("Final validation...")
-    check_loss = trainer.validate(mlp, check_dataloader)[0]["val_loss"]
+    trainer = L.Trainer()
+
+    validation_dataloader = data["val_dataloader"] or data["train_dataloader"]
+    check_loss = trainer.validate(mlp, validation_dataloader)[0]["val_loss"]
 
     output_path = f"{Path(original_data_path).stem}_optimized.json"
     save_trained_model(output_path, cfg, model_dict, data, selected_features, output)
