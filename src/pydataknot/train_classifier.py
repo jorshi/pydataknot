@@ -136,7 +136,7 @@ def main(cfg: DKClassifierConfig) -> None:
 
     # MLPClassifier needs labels corresponding to the onehot
     # prediction along with the model weights.
-    model_dict = fit["mlp"].model.get_as_dict()
+    model_dict = fit["mlp"].model.to_dict()
     output_path = f"{Path(cfg.data).stem}_pytrained.json"
     save_trained_model(output_path, cfg, model_dict, data, selected_features, output)
 

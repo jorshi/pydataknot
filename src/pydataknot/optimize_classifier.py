@@ -23,7 +23,7 @@ import torch
 
 from pydataknot.config import DKOptimizeClassifierConfig
 import pydataknot.data as dkdata
-from pydataknot.model import regressor_from_dict
+from pydataknot.model import FluidMLP
 import pydataknot.mrmr as mrmr
 from pydataknot.task import FluidMLPClassifier
 from pydataknot.train_classifier import fit_model, select_features, setup_data
@@ -67,42 +67,45 @@ def objective(
     for i in range(n_layers):
         layers.append(trial.suggest_categorical(f"n_units_l{i}", layer_sizes))
 
-    cfg.mlp.hidden_layers = layers
-    cfg.mlp.activation = trial.suggest_int("activation", 0, 3)
-    cfg.mlp.batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 64, 128])
-    cfg.mlp.learn_rate = trial.suggest_float("lr", 1e-6, 1.0, log=True)
-    if cfg.mlp.optimizer == "sgd":
-        cfg.mlp.momentum = trial.suggest_float("momentum", 0.0, 1.0)
+    opt_cfg = cfg.copy()
+    opt_cfg.mlp.hidden_layers = layers
+    opt_cfg.mlp.activation = trial.suggest_int("activation", 0, 3)
+    opt_cfg.mlp.batch_size = trial.suggest_categorical(
+        "batch_size", [8, 16, 32, 64, 128]
+    )
+    opt_cfg.mlp.learn_rate = trial.suggest_float("lr", 1e-6, 1.0, log=True)
+    if opt_cfg.mlp.optimizer == "sgd":
+        opt_cfg.mlp.momentum = trial.suggest_float("momentum", 0.0, 1.0)
 
     # Optimize on val loss if it is being used
-    metric = "val_acc" if cfg.mlp.validation > 0.0 else "train_loss"
+    metric = "val_acc" if opt_cfg.mlp.validation > 0.0 else "train_loss"
 
     # Callback integration to enable optuna to prune trials
     callbacks = [PyTorchLightningPruningCallback(trial, monitor=metric)]
 
     # Reload the data and potentially study num features for mRMR
-    dataset, labels, output = dkdata.load_data(cfg)
-    if cfg.optimize_features:
-        if cfg.features != "":
+    dataset, labels, output = dkdata.load_data(opt_cfg)
+    if opt_cfg.optimize_features:
+        if opt_cfg.features != "":
             raise ValueError(
                 "Manual feature selection not available with feature optimization"
             )
         num_features = trial.suggest_int("num_features", 1, dataset["cols"])
         dataset, selected_features = select_features_mrmr(
-            num_features, dataset, labels, cfg
+            num_features, dataset, labels, opt_cfg
         )
     else:
-        dataset, selected_features = select_features(dataset, output, cfg)
-    data = setup_data(dataset, labels, cfg)
+        dataset, selected_features = select_features(dataset, output, opt_cfg)
+    data = setup_data(dataset, labels, opt_cfg)
 
     # Fit the model
-    fit = fit_model(cfg, data, extra_callbacks=callbacks)
+    fit = fit_model(opt_cfg, data, extra_callbacks=callbacks)
 
     # Save model artefacts
     if artifact_store is not None:
         # Save the model json and selected features
         model_dict = {
-            "mlp": fit["mlp"].model.get_as_dict(),
+            "mlp": fit["mlp"].model.to_dict(),
             "selected_features": selected_features,
             "scaler": data["scaler"],
         }
@@ -123,6 +126,12 @@ def objective(
 
 def perform_outlier_detection(dataset, outlier_detection, output, cfg):
     dataset = dkdata.convert_fluid_dataset_to_tensor(dataset)
+    scaler = instantiate(cfg.scaler) if cfg.scaler else None
+    if scaler is not None:
+        logger.info(f"Scaling dataset with {str(scaler)}")
+        scaler.fit(dataset)
+        dataset = scaler.transform(dataset)
+
     outliers, inliers = outlier_detection(dataset)
     outliers = outliers.numpy()
 
@@ -163,7 +172,7 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
 
     dataset, labels, output = dkdata.load_data(cfg)
 
-    prev_outliers = getattr(output["meta"]["info"], "outliers", 0)
+    prev_outliers = output["meta"]["info"].get("outliers", 0)
     outlier_detection = instantiate(cfg.outlier)
     tmp_data_path = None
     original_data_path = cfg.data
@@ -200,19 +209,20 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
         direction=direction, pruner=pruner, storage=storage, study_name=cfg.study_name
     )
 
-    # Add default parameters as our current best guess
-    default_hyperparameters = {
-        "activation": cfg.mlp.activation,
-        "batch_size": 64,
-        "lr": cfg.mlp.learn_rate,
-        "momentum": cfg.mlp.momentum,
-        "n_layers": len(cfg.mlp.hidden_layers),
-        "num_features": data["train_dataset"][0][0].shape[0],
-    }
-    for i, layer in enumerate(cfg.mlp.hidden_layers):
-        default_hyperparameters[f"n_units_l{i}"] = 2 ** math.ceil(math.log2(layer))
+    if cfg.include_default:
+        # Add default parameters as our current best guess
+        default_hyperparameters = {
+            "activation": cfg.mlp.activation,
+            "batch_size": cfg.mlp.batch_size,
+            "lr": cfg.mlp.learn_rate,
+            "momentum": cfg.mlp.momentum,
+            "n_layers": len(cfg.mlp.hidden_layers),
+            "num_features": data["train_dataset"][0][0].shape[0],
+        }
+        for i, layer in enumerate(cfg.mlp.hidden_layers):
+            default_hyperparameters[f"n_units_l{i}"] = 2 ** math.ceil(math.log2(layer))
 
-    study.enqueue_trial(default_hyperparameters)
+        study.enqueue_trial(default_hyperparameters)
 
     # Run the study
     objective_func = partial(objective, cfg=cfg, artifact_store=artifact_store)
@@ -254,7 +264,7 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     cfg.mlp.input_size = data["train_dataset"][0][0].shape[0]
     cfg.mlp.output_size = data["train_dataset"][0][1].shape[0]
 
-    model = regressor_from_dict(model_dict)
+    model = FluidMLP.from_dict(model_dict)
     mlp: FluidMLPClassifier = instantiate(cfg.mlp)
     mlp.model = model
 
@@ -264,12 +274,9 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     if cfg.deep_run:
         logger.info("Starting a longer training with best model...")
 
-        # Reload data ...
-        output["meta"]["info"]["feature_select"] = 1
-        output["feature_select"] = selected_features
-        dataset, selected_features = select_features(dataset, output, cfg)
-
-        trainer = L.Trainer(max_epochs=cfg.mlp.max_iter, callbacks=data["callbacks"])
+        trainer = L.Trainer(
+            max_epochs=cfg.deep_run_max_iters, callbacks=data["callbacks"]
+        )
 
         # Sanity check -- the loaded model should reproduce the best trial's loss.
         # Without a validation split the trial optimized train_loss, so check on the
@@ -278,7 +285,7 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
         check_loss = trainer.validate(mlp, check_dataloader)[0]["val_loss"]
         logger.info(
             f"Loaded model loss: {check_loss:.6f} "
-            "(best trial value: {study.best_trial.value:.6f})"
+            f"(best trial value: {study.best_trial.value:.6f})"
         )
 
         logger.info("Starting training...")

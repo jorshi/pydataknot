@@ -49,6 +49,7 @@ class FluidNormalize(FluidBaseScaler):
     def __init__(self, min: float = 0.0, max: float = 1.0):
         """
         Initialize the normalizer with min and max values.
+        # TODO: Protect against divide by zero
         """
         self.min = min
         self.max = max

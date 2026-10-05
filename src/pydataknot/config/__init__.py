@@ -134,9 +134,11 @@ class DKOptimizeClassifierConfig(DKBaseConfig):
     n_trials: int = 10
     n_startup_trials: int = 10  # Number trials before start checking to prune
     n_warmup_steps: int = 100  # Number warm-up steps.
+    include_default: bool = True
 
     # Perform a deep model training after optimization
     deep_run: bool = True
+    deep_run_max_iters: int = 1000
 
     hydra: HydraConf = field(
         default_factory=lambda: HydraConf(
