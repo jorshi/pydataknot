@@ -4,18 +4,10 @@ import os
 from pathlib import Path
 
 from hydra import initialize_config_module, compose
-import pytest
 
 from pydataknot import optimize_classifier
 
-test_data = Path(__file__).parent.joinpath("data")
-
-
-@pytest.fixture
-def rundir(tmp_path):
-    current_dir = os.getcwd()
-    yield tmp_path
-    os.chdir(current_dir)
+test_data = Path(__file__).parents[1].joinpath("data")
 
 
 def test_optimize_classifier(rundir):

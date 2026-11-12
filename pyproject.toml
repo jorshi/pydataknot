@@ -40,3 +40,9 @@ dev-dependencies = [
     "pytest>=8.4.2",
     "ruff>=0.13.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: end-to-end runs of the CLI workflows (slow)",
+]

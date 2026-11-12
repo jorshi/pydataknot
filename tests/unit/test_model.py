@@ -5,7 +5,7 @@ import torch
 
 from pydataknot.model import FluidMLP, regressor_from_dict
 
-test_data = Path(__file__).parent.joinpath("data")
+test_data = Path(__file__).parents[1].joinpath("data")
 
 
 def test_init_from_dict():
