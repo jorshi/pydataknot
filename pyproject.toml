@@ -32,8 +32,8 @@ dashboard = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pre-commit>=4.3.0",
     "pyfakefs>=5.9.3",
     "pytest-cov>=7.1.0",

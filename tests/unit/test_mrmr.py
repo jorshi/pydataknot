@@ -1,6 +1,13 @@
+import pytest
 import torch
 
 from pydataknot import mrmr
+
+# These tests use a constant feature on purpose, which sklearn's f_classif warns about
+pytestmark = [
+    pytest.mark.filterwarnings("ignore:Features .* are constant:UserWarning"),
+    pytest.mark.filterwarnings("ignore:invalid value encountered:RuntimeWarning"),
+]
 
 
 def make_dataset():
