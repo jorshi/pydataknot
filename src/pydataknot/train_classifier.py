@@ -64,6 +64,8 @@ def setup_data(source: Dict, target: Dict, cfg: DKClassifierConfig) -> Dict:
     )
     logger.info(f"Loaded dataset with {len(train_dataset)} samples.")
 
+    # TODO: fit scaler only on the train dataset and then transform the val dataset
+
     # Split dataset if using validation
     val_ratio = cfg.mlp.validation
     val_dataloader = None
