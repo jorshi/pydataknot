@@ -61,7 +61,13 @@ class FluidNormalize(FluidBaseScaler):
 
     def transform(self, data: torch.Tensor) -> torch.Tensor:
         assert data.ndim == 2, "Data should be a 2D tensor."
-        normalized_data = (data - self.data_min) / (self.data_max - self.data_min)
+
+        # Don't divide by zero if the different between the max and min is small
+        eps = 10 * torch.finfo(data.dtype).smallest_normal
+        denom = self.data_max - self.data_min
+        denom = torch.where(denom < eps, 1.0, denom)
+        normalized_data = (data - self.data_min) / denom
+
         return normalized_data * (self.max - self.min) + self.min
 
     def get_as_dict(self) -> Dict:
