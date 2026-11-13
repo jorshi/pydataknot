@@ -30,7 +30,6 @@ def relevancy_redundancy_clssif(x: torch.Tensor, y: torch.Tensor):
     return relevancy, redundancy
 
 
-# TODO: check whether Rodrigo zero indexes feature selection
 def select_features(
     num_featues: int, relevancy: torch.Tensor, redundancy: torch.Tensor
 ):

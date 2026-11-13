@@ -81,3 +81,35 @@ def test_optimize_non_contiguous_features(rundir, mocker):
     assert trained_model["feature_select"] == selected
     layers = trained_model["pythonclassifier"]["mlp"]["layers"]
     assert layers[0]["rows"] == len(selected)
+
+
+def test_optimize_without_feature_optimization(rundir):
+    # Regression test: with optimize_features=false the best trial has no feature
+    # selection, which used to be written out as an empty selection and reduce the
+    # dataset to zero columns after the study.
+    with initialize_config_module(version_base=None, config_module="pydataknot.config"):
+        data_arg = f"data={test_data.joinpath('snare_headrim_dataset.json')}"
+        cfg = compose(
+            "optimize_classifier_config",
+            overrides=[
+                data_arg,
+                "mlp.max_iter=2",
+                "n_trials=1",
+                "optimize_features=false",
+                "deep_run=true",
+                "deep_run_max_iters=2",
+            ],
+        )
+
+        os.chdir(rundir)
+        optimize_classifier.main(cfg)
+
+    with open("snare_headrim_dataset_optimized.json") as f:
+        trained_model = json.load(f)
+
+    # All features are used and no feature selection is recorded
+    num_features = trained_model["dataset"]["cols"]
+    layers = trained_model["pythonclassifier"]["mlp"]["layers"]
+    assert layers[0]["rows"] == num_features
+    assert "feature_select" not in trained_model
+    assert trained_model["meta"]["info"].get("feature_select", 0) == 0

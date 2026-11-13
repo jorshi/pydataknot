@@ -71,7 +71,7 @@ class FluidMLP(torch.nn.Module):
         layers = model_dict["layers"]
         activation = {layer["activation"] for layer in layers[:-1]}
         if len(activation) != 1:
-            raise ValueError("FluidMLP reques one activation for all hidden layers")
+            raise ValueError("FluidMLP requires one activation for all hidden layers")
 
         mlp = cls(
             input_size=layers[0]["rows"],
