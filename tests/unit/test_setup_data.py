@@ -2,6 +2,7 @@ from omegaconf import OmegaConf
 import pytest
 import torch
 
+from pydataknot.data import FluidDataset, split_dataset_for_validation
 from pydataknot.train_classifier import setup_data
 
 
@@ -90,10 +91,45 @@ def test_no_scaler(validation):
 def test_stratify_raises():
     _, source, target = make_fluid_data(3, 8)
 
-    # Test to confirm that two few classes with data stratification on raises
+    # Test to confirm that too few classes with data stratification on raises
     # a specific error.
     with pytest.raises(ValueError, match="The least populated class *"):
         setup_data(source, target, make_cfg(NORMALIZE, stratify=True))
 
     # Confirm that we can run this data if stratify is False.
     setup_data(source, target, make_cfg(NORMALIZE, stratify=False))
+
+
+def test_stratified_split_preserves_class_balance():
+    # Two balanced classes of 20 entries each -- a 0.25 validation split must put
+    # exactly 5 of each class in the validation set. Labels are in two blocks
+    # rather than alternating, which an unstratified split doesn't balance.
+    _, source, target = make_fluid_data(NUM_ROWS, NUM_COLS)
+    target["data"] = {
+        str(i): ["a" if i < NUM_ROWS // 2 else "b"] for i in range(NUM_ROWS)
+    }
+    data = setup_data(source, target, make_cfg(NORMALIZE, stratify=True))
+
+    train_classes = data["train_dataset"].target.argmax(dim=-1)
+    val_classes = data["val_dataloader"].dataset.target.argmax(dim=-1)
+    assert torch.bincount(val_classes).tolist() == [5, 5]
+    assert torch.bincount(train_classes).tolist() == [15, 15]
+
+
+def test_stratify_raises_too_few_validation_entries():
+    # 8 classes with 3 entries each: a 0.2 validation split gives 5 validation
+    # entries, which can't hold one entry of each class
+    num_classes, per_class = 8, 3
+    y = torch.eye(num_classes).repeat_interleave(per_class, dim=0)
+    dataset = FluidDataset(torch.randn(len(y), 4), y)
+
+    with pytest.raises(ValueError, match="A stratified split needs at least 8"):
+        split_dataset_for_validation(dataset, 0.2, stratify=True)
+
+    # A larger validation split leaves room for every class in both sets
+    train, val = split_dataset_for_validation(dataset, 0.5, stratify=True)
+    assert torch.bincount(val.target.argmax(dim=-1)).min() >= 1
+    assert torch.bincount(train.target.argmax(dim=-1)).min() >= 1
+
+    # Unstratified splits are still allowed
+    split_dataset_for_validation(dataset, 0.2, stratify=False)
