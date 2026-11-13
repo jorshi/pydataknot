@@ -1,59 +1,77 @@
 import json
 from pathlib import Path
 
+import numpy as np
 import torch
 
-from pydataknot.model import FluidMLP, regressor_from_dict
+from pydataknot.model import FluidMLP
 from pydataknot.utils import save_trained_model
 
 test_data = Path(__file__).parents[1].joinpath("data")
 
 
-def test_init_from_dict():
-    data_path = test_data.joinpath("snaretrainingcomplete.json")
-    with open(data_path, "r") as fp:
-        model_dict = json.load(fp)
+def load_fixture_model_dict():
+    with open(test_data.joinpath("snaretrainingcomplete.json"), "r") as fp:
+        return json.load(fp)["mlpclassifier"]["mlp"]
 
-    model_dict = model_dict["mlpclassifier"]["mlp"]
-    mlp_1 = FluidMLP.from_dict(model_dict)
-    mlp_2 = regressor_from_dict(model_dict)
 
-    for layer_a, layer_b in zip(mlp_1.model.modules(), mlp_2.modules()):
-        assert type(layer_a) is type(layer_b)
-        if isinstance(layer_a, torch.nn.Linear):
-            assert torch.allclose(layer_a.weight.data, layer_b.weight.data)
-            assert torch.allclose(layer_a.bias.data, layer_b.bias.data)
+NUMPY_ACTIVATIONS = {
+    0: lambda x: x,
+    1: lambda x: 1.0 / (1.0 + np.exp(-x)),
+    2: lambda x: np.maximum(x, 0.0),
+    3: np.tanh,
+}
+
+
+def reference_forward(model_dict, x):
+    # Independent forward pass of a FluCoMa MLP computed directly from the
+    # dictionary. FluCoMa stores weights as (rows=inputs, cols=outputs).
+    for layer in model_dict["layers"]:
+        x = x @ np.array(layer["weights"]) + np.array(layer["biases"])
+        x = NUMPY_ACTIVATIONS[layer["activation"]](x)
+    return x
+
+
+def test_from_dict():
+    model_dict = load_fixture_model_dict()
+    mlp = FluidMLP.from_dict(model_dict)
+
+    linears = [m for m in mlp.modules() if isinstance(m, torch.nn.Linear)]
+    assert len(linears) == len(model_dict["layers"])
+    for linear, layer in zip(linears, model_dict["layers"]):
+        assert linear.in_features == layer["rows"]
+        assert linear.out_features == layer["cols"]
+        weights = torch.tensor(layer["weights"]).T
+        assert torch.allclose(linear.weight.data, weights)
+        assert torch.allclose(linear.bias.data, torch.tensor(layer["biases"]))
+
+
+def test_to_dict_round_trip():
+    model_dict = load_fixture_model_dict()
+    round_trip = FluidMLP.from_dict(model_dict).to_dict()
+
+    assert len(round_trip["layers"]) == len(model_dict["layers"])
+    for a, b in zip(round_trip["layers"], model_dict["layers"]):
+        assert a.keys() == b.keys()
+        for key in ["activation", "cols", "rows"]:
+            assert a[key] == b[key]
+        for key in ["weights", "biases"]:
+            assert np.allclose(a[key], b[key], atol=1e-6)
 
 
 def test_model_load():
-    data_path = test_data.joinpath("snaretrainingcomplete.json")
-    mlp = FluidMLP.load(data_path)
+    model_dict = load_fixture_model_dict()
+    mlp = FluidMLP.load(test_data.joinpath("snaretrainingcomplete.json"))
 
-    l_a = [(89, 104), (74, 89), (59, 74), (44, 59), (29, 44), (10, 29)]
-    l_b = [
-        layer.weight.data.shape
-        for layer in mlp.modules()
-        if isinstance(layer, torch.nn.Linear)
+    shapes = [
+        m.weight.data.shape for m in mlp.modules() if isinstance(m, torch.nn.Linear)
     ]
-    for a, b in zip(l_a, l_b):
-        assert a == b
+    assert shapes == [(89, 104), (74, 89), (59, 74), (44, 59), (29, 44), (10, 29)]
 
-    data_path = test_data.joinpath("snaretrainingcomplete.json")
-    with open(data_path, "r") as fp:
-        model_dict = json.load(fp)
-
-    model_dict = model_dict["mlpclassifier"]["mlp"]
-    mlp_1 = FluidMLP.from_dict(model_dict)
-    mlp_2 = regressor_from_dict(model_dict)
-
-    x = torch.randn(1, 104)
-
-    y_a = mlp(x)
-    y_b = mlp_1(x)
-    y_c = mlp_2(x)
-
-    assert torch.allclose(y_a, y_b)
-    assert torch.allclose(y_a, y_c)
+    torch.manual_seed(0)
+    x = torch.randn(4, 104)
+    expected = reference_forward(model_dict, x.double().numpy())
+    assert np.allclose(mlp(x).detach().numpy(), expected, atol=1e-5)
 
 
 def test_model_load_python_trained(tmp_path):

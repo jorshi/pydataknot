@@ -89,6 +89,8 @@ class FluidMLP(torch.nn.Module):
         idx = 0
         for layer in self.modules():
             if isinstance(layer, FluidLinear):
+                # contiguous() is required -- MPS silently computes wrong results
+                # with the transposed (non-contiguous) view.
                 weights = torch.tensor(layers[idx]["weights"]).T.contiguous()
                 bias = torch.tensor(layers[idx]["biases"])
                 assert weights.shape == layer.linear.weight.data.shape
@@ -140,31 +142,3 @@ class FluidLinear(torch.nn.Module):
 
 def get_activation(activation: int):
     return FLUID_ACTIVATIONS[activation]()
-
-
-def get_layer(layer: Dict, init: bool = True):
-    activation = layer["activation"]
-    output_dims = layer["cols"]
-    input_dims = layer["rows"]
-    weights = torch.tensor(layer["weights"])
-    bias = torch.tensor(layer["biases"])
-
-    activation = get_activation(activation)
-    linear = FluidLinear(input_dims, output_dims)
-    if init:
-        # contiguous() is required -- MPS silently computes wrong results with the
-        # transposed (non-contiguous) view.
-        linear.linear.weight.data = weights.T.contiguous()
-        linear.linear.bias.data = bias
-
-    return linear, activation
-
-
-def regressor_from_dict(regressor_dict: Dict):
-    model = []
-    for layer in regressor_dict["layers"]:
-        linear, activation = get_layer(layer)
-        model.append(linear)
-        model.append(activation)
-
-    return torch.nn.Sequential(*model)
