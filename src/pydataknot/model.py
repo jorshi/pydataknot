@@ -105,7 +105,7 @@ class FluidMLP(torch.nn.Module):
             model_dict = json.load(fp)
 
         if python_trained:
-            pass
+            model_dict = model_dict["pythonclassifier"]["mlp"]
         else:
             model_dict = model_dict["mlpclassifier"]["mlp"]
 

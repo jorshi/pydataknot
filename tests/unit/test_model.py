@@ -4,6 +4,7 @@ from pathlib import Path
 import torch
 
 from pydataknot.model import FluidMLP, regressor_from_dict
+from pydataknot.utils import save_trained_model
 
 test_data = Path(__file__).parents[1].joinpath("data")
 
@@ -53,3 +54,25 @@ def test_model_load():
 
     assert torch.allclose(y_a, y_b)
     assert torch.allclose(y_a, y_c)
+
+
+def test_model_load_python_trained(tmp_path):
+    # Round trip through save_trained_model, which writes the pythonclassifier
+    # entry in the _pytrained.json / _optimized.json outputs
+    torch.manual_seed(0)
+    mlp = FluidMLP(
+        input_size=8,
+        hidden_layers=[16, 4],
+        output_size=3,
+        activation=3,
+        output_activation=1,
+    )
+    output = {"meta": {"info": {}}}
+    data = {"labels": ["a", "b", "c"], "scaler": None}
+    output_path = tmp_path.joinpath("model_pytrained.json")
+    save_trained_model(output_path, None, mlp.to_dict(), data, [], output)
+
+    loaded = FluidMLP.load(output_path, python_trained=True)
+
+    x = torch.randn(5, 8)
+    assert torch.allclose(mlp(x), loaded(x))

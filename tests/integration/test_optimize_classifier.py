@@ -38,3 +38,46 @@ def test_optimize_classifier(rundir):
         assert set(classifier["labels"]["labels"]) == set(
             trained_model["meta"]["info"]["class_names"]
         )
+
+
+def test_optimize_non_contiguous_features(rundir, mocker):
+    # Regression test: the deep run used to re-apply the selected feature indices
+    # to an already reduced dataset, which crashed (or picked the wrong columns)
+    # whenever the best trial selected a non-contiguous subset of features.
+    selected = [0, 5, 17]
+
+    def fixed_selection(num_features, dataset, labels, cfg):
+        dataset_selected = {
+            "cols": len(selected),
+            "data": {k: [v[i] for i in selected] for k, v in dataset["data"].items()},
+        }
+        return dataset_selected, list(selected)
+
+    mocker.patch.object(
+        optimize_classifier, "select_features_mrmr", side_effect=fixed_selection
+    )
+
+    with initialize_config_module(version_base=None, config_module="pydataknot.config"):
+        data_arg = f"data={test_data.joinpath('snare_headrim_dataset.json')}"
+        cfg = compose(
+            "optimize_classifier_config",
+            overrides=[
+                data_arg,
+                "mlp.max_iter=2",
+                "n_trials=1",
+                "include_default=false",
+                "optimize_features=true",
+                "deep_run=true",
+                "deep_run_max_iters=2",
+            ],
+        )
+
+        os.chdir(rundir)
+        optimize_classifier.main(cfg)
+
+    with open("snare_headrim_dataset_optimized.json") as f:
+        trained_model = json.load(f)
+
+    assert trained_model["feature_select"] == selected
+    layers = trained_model["pythonclassifier"]["mlp"]["layers"]
+    assert layers[0]["rows"] == len(selected)
