@@ -282,9 +282,9 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
         # Without a validation split the trial optimized train_loss, so check on the
         # train set instead (reported by validate as val_loss).
         check_dataloader = data["val_dataloader"] or data["train_dataloader"]
-        check_loss = trainer.validate(mlp, check_dataloader)[0]["val_loss"]
+        check_acc = trainer.validate(mlp, check_dataloader)[0]["val_acc"]
         logger.info(
-            f"Loaded model loss: {check_loss:.6f} "
+            f"Loaded model accuraacy: {check_acc:.6f} "
             f"(best trial value: {study.best_trial.value:.6f})"
         )
 
@@ -302,7 +302,7 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     trainer = L.Trainer()
 
     validation_dataloader = data["val_dataloader"] or data["train_dataloader"]
-    check_loss = trainer.validate(mlp, validation_dataloader)[0]["val_loss"]
+    trainer.validate(mlp, validation_dataloader)
 
     output_path = f"{Path(original_data_path).stem}_optimized.json"
     save_trained_model(output_path, cfg, model_dict, data, selected_features, output)
