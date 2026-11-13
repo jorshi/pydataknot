@@ -18,3 +18,6 @@ outputs/
 .coverage.*
 htmlcov/
 coverage.xml
+
+# Local notes and plans
+journal/
