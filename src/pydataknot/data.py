@@ -1,13 +1,11 @@
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import hydra
 from loguru import logger
 from omegaconf import DictConfig
 from sklearn.model_selection import train_test_split
 import torch
-
-from pydataknot.scaler import FluidBaseScaler
 
 
 class FluidDataset(torch.utils.data.Dataset):
@@ -130,11 +128,7 @@ def load_data(cfg: DictConfig) -> None:
     return dataset, labelset, data
 
 
-def load_classifier_dateset(
-    source_data: Dict,
-    target_data: Dict,
-    scaler: Optional[FluidBaseScaler] = None,
-):
+def load_classifier_dataset(source_data: Dict, target_data: Dict):
     """
     Load source and target datasets from dictionaries
     """
@@ -146,15 +140,8 @@ def load_classifier_dateset(
             "Source and target datasets must have the same number of samples."
         )
 
-    # Apply scaler to input if needed
-    source_scaler_dict = None
-    if scaler is not None:
-        scaler.fit(source_data)
-        source_data = scaler.transform(source_data)
-        source_scaler_dict = scaler.get_as_dict()
-
     dataset = FluidDataset(source_data, target_data)
-    return dataset, source_scaler_dict, target_labels
+    return dataset, target_labels
 
 
 def split_dataset_for_validation(
