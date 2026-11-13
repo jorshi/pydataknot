@@ -1,13 +1,13 @@
 import json
-from typing import Any, Dict, List, Optional, Tuple
+import math
+from typing import Any, Dict, List, Tuple
 
 import hydra
 from loguru import logger
+import numpy as np
 from omegaconf import DictConfig
 from sklearn.model_selection import train_test_split
 import torch
-
-from pydataknot.scaler import FluidBaseScaler
 
 
 class FluidDataset(torch.utils.data.Dataset):
@@ -24,9 +24,9 @@ class FluidDataset(torch.utils.data.Dataset):
         """
         assert source.ndim == 2, "Source data should be a 2D tensor."
         assert target.ndim == 2, "Target data should be a 2D tensor."
-        assert (
-            source.shape[0] == target.shape[0]
-        ), "Source and target must have the same number of samples."
+        assert source.shape[0] == target.shape[0], (
+            "Source and target must have the same number of samples."
+        )
 
         self.source = source
         self.target = target
@@ -51,9 +51,9 @@ def convert_fluid_dataset_to_tensor(fluid_data: Dict):
 
     data = torch.tensor(data, dtype=torch.float32)
     assert data.ndim == 2, "Data should be a 2D tensor."
-    assert (
-        data.shape[1] == fluid_data["cols"]
-    ), f"Data shape mismatch: expected {fluid_data['cols']} columns, got {data.shape[1]}."
+    assert data.shape[1] == fluid_data["cols"], (
+        f"Data shape mismatch: expected {fluid_data['cols']} columns, got {data.shape[1]}."
+    )
     return data
 
 
@@ -81,9 +81,9 @@ def convert_fluid_labelset_to_tensor(fluid_data: Dict):
 
     data = torch.vstack(data)
     assert data.ndim == 2, "Data should be a 2D tensor."
-    assert data.shape[1] == len(
-        labels
-    ), f"Data shape mismatch: expected {len(labels)} columns, got {data.shape[1]}."
+    assert data.shape[1] == len(labels), (
+        f"Data shape mismatch: expected {len(labels)} columns, got {data.shape[1]}."
+    )
     return data, labels
 
 
@@ -130,11 +130,7 @@ def load_data(cfg: DictConfig) -> None:
     return dataset, labelset, data
 
 
-def load_classifier_dateset(
-    source_data: Dict,
-    target_data: Dict,
-    scaler: Optional[FluidBaseScaler] = None,
-):
+def load_classifier_dataset(source_data: Dict, target_data: Dict):
     """
     Load source and target datasets from dictionaries
     """
@@ -146,19 +142,12 @@ def load_classifier_dateset(
             "Source and target datasets must have the same number of samples."
         )
 
-    # Apply scaler to input if needed
-    source_scaler_dict = None
-    if scaler is not None:
-        scaler.fit(source_data)
-        source_data = scaler.transform(source_data)
-        source_scaler_dict = scaler.get_as_dict()
-
     dataset = FluidDataset(source_data, target_data)
-    return dataset, source_scaler_dict, target_labels
+    return dataset, target_labels
 
 
 def split_dataset_for_validation(
-    dataset: FluidDataset, val_ratio: float, seed: int = 42, stratify: bool = False
+    dataset: FluidDataset, val_ratio: float, seed: int = 42, stratify: bool = True
 ):
     # Make sure to do a class-balanced split!
 
@@ -171,6 +160,27 @@ def split_dataset_for_validation(
     y = dataset.target.numpy()
 
     classes = y.argmax(axis=-1) if stratify else None
+    if classes is not None and np.any(np.bincount(classes) < 2):
+        raise ValueError(
+            "The least populated class has less than two entries, which is a "
+            "requirement for data stratification. If you want, run with "
+            "stratify=false to bypass this."
+        )
+
+    # A stratified split needs at least one entry of every class in both the train
+    # and validation sets. Sizes are computed the same way as train_test_split.
+    num_classes = y.shape[-1]
+    num_val = math.ceil(val_ratio * num_data)
+    num_train = num_data - num_val
+    if classes is not None and min(num_val, num_train) < num_classes:
+        raise ValueError(
+            f"A stratified split needs at least {num_classes} entries (one per "
+            f"class) in both the train and validation sets, but a validation ratio "
+            f"of {val_ratio} on {num_data} entries gives {num_train} train and "
+            f"{num_val} validation entries. Adjust mlp.validation, add more data, "
+            "or run with stratify=false to bypass this."
+        )
+
     x_train, x_test, y_train, y_test = train_test_split(
         x, y, test_size=val_ratio, random_state=seed, shuffle=True, stratify=classes
     )

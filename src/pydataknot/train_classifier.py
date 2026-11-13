@@ -15,6 +15,7 @@ import torch
 
 from pydataknot.config import DKClassifierConfig
 import pydataknot.data as dkdata
+from pydataknot.scaler import FluidBaseScaler
 from pydataknot.utils import save_trained_model
 
 
@@ -55,41 +56,58 @@ def select_features(
 
 def setup_data(source: Dict, target: Dict, cfg: DKClassifierConfig) -> Dict:
     # Load the dataset
-    # TODO: split dataset into validation as well.
-    scaler = instantiate(cfg.scaler) if cfg.scaler else None
-    train_dataset, source_scaler, labels = dkdata.load_classifier_dateset(
+    train_dataset, labels = dkdata.load_classifier_dataset(
         source_data=source,
         target_data=target,
-        scaler=scaler,
     )
     logger.info(f"Loaded dataset with {len(train_dataset)} samples.")
 
     # Split dataset if using validation
     val_ratio = cfg.mlp.validation
-    val_dataloader = None
+    val_dataset = None
     callbacks = []
+
     if val_ratio > 0.0:
         logger.info(f"Using a validation split ratio of {val_ratio}")
         # TODO: add a seed for valdiation
         train_dataset, val_dataset = dkdata.split_dataset_for_validation(
-            train_dataset, val_ratio
-        )
-        val_dataloader = torch.utils.data.DataLoader(
-            val_dataset, batch_size=cfg.mlp.batch_size, shuffle=False
+            train_dataset, val_ratio, stratify=cfg.stratify
         )
         early_stopping = EarlyStopping("val_loss", patience=100)
         callbacks.append(early_stopping)
 
+    # Scale the dataset -- fit only on the train split so no validation statistics
+    # leak into training
+    scaler: Optional[FluidBaseScaler] = instantiate(cfg.scaler) if cfg.scaler else None
+    scaler_dict = None
+    if scaler is not None:
+        scaler.fit(train_dataset.source)
+        train_dataset.source = scaler.transform(train_dataset.source)
+        if val_dataset is not None:
+            val_dataset.source = scaler.transform(val_dataset.source)
+
+        # Pass the scaler back as a dictionary
+        # TODO: this is a bit awkward, better to pass back the full object and
+        # then get as dict when it needs to be serialized? Or better yet, handle
+        # serialization of Scaler objects in a custom serializer.
+        scaler_dict = scaler.get_as_dict()
+
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset, batch_size=cfg.mlp.batch_size, shuffle=True
     )
+
+    val_dataloader = None
+    if val_dataset is not None:
+        val_dataloader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=cfg.mlp.batch_size, shuffle=False
+        )
 
     data = {
         "train_dataloader": train_dataloader,
         "train_dataset": train_dataset,
         "val_dataloader": val_dataloader,
         "callbacks": callbacks,
-        "scaler": source_scaler,
+        "scaler": scaler_dict,
         "scaler_name": scaler.name if scaler is not None else "none",
         "labels": labels,
     }

@@ -2,6 +2,7 @@
 Maximum Relevancy Minimum Redundancy Feature Selection
 """
 
+from loguru import logger
 import numpy as np
 from sklearn.feature_selection import f_classif
 import torch
@@ -14,13 +15,21 @@ def relevancy_redundancy_clssif(x: torch.Tensor, y: torch.Tensor):
     relevancy = torch.from_numpy(f_classif(x.numpy(), y.numpy())[0])
     redundancy = torch.corrcoef(x.T)
 
+    # Constant features have NaN relevancy (0/0 F-statistic) and NaN correlations.
+    # NaN wins argmax in select_features, so treat these features as having no
+    # relevancy and being fully redundant -- they will be selected last.
+    constant = torch.isnan(relevancy).nonzero().flatten().tolist()
+    if len(constant) > 0:
+        logger.warning(f"Found constant features: {constant}")
+    relevancy = torch.nan_to_num(relevancy, nan=0.0)
+    redundancy = torch.nan_to_num(redundancy, nan=1.0)
+
     assert relevancy.shape == (x.shape[-1],)
     assert redundancy.shape == (x.shape[-1], x.shape[-1])
 
     return relevancy, redundancy
 
 
-# TODO: check whether Rodrigo zero indexes feature selection
 def select_features(
     num_featues: int, relevancy: torch.Tensor, redundancy: torch.Tensor
 ):

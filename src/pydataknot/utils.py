@@ -84,6 +84,11 @@ def save_trained_model(
     if len(selected_features) > 0:
         output["meta"]["info"]["feature_select"] = 1
         output["feature_select"] = selected_features
+    elif "feature_select" in output["meta"]["info"]:
+        # The model was trained on all features, so clear any feature selection
+        # carried over from the input file (e.g. overridden with features=all)
+        output["meta"]["info"]["feature_select"] = 0
+        output.pop("feature_select", None)
 
     with open(output_path, "w") as f:
         f.write(json_dump(output, indent=4))

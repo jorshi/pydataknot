@@ -246,15 +246,16 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     data["scaler"] = best_model["scaler"]
     model_dict = best_model["mlp"]
 
-    # Reload data ...
-    output["meta"]["info"]["feature_select"] = 1
-    output["feature_select"] = selected_features
+    # Reload data with the best trial's feature selection. An empty selection means
+    # all features were used -- marking it as a selection would select zero columns.
+    if len(selected_features) > 0:
+        output["meta"]["info"]["feature_select"] = 1
+        output["feature_select"] = selected_features
     dataset, selected_features = select_features(dataset, output, cfg)
     data = setup_data(dataset, labels, cfg)
 
     # Reconstruct the best model object from config
     params = study.best_trial.params
-    cfg.mlp.max_iter = 1000
     cfg.mlp.learn_rate = params["lr"]
     if cfg.mlp.optimizer == "sgd":
         cfg.mlp.momentum = params["momentum"]
@@ -278,13 +279,17 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
             max_epochs=cfg.deep_run_max_iters, callbacks=data["callbacks"]
         )
 
-        # Sanity check -- the loaded model should reproduce the best trial's loss.
-        # Without a validation split the trial optimized train_loss, so check on the
-        # train set instead (reported by validate as val_loss).
-        check_dataloader = data["val_dataloader"] or data["train_dataloader"]
-        check_loss = trainer.validate(mlp, check_dataloader)[0]["val_loss"]
+        # Sanity check -- the loaded model should reproduce the metric the best trial
+        # was optimized on. With a validation split that is val_acc. Without one the
+        # trial optimized train_loss, so check on the train set instead, which
+        # validate reports as val_loss.
+        if data["val_dataloader"] is not None:
+            check_dataloader, check_metric = data["val_dataloader"], "val_acc"
+        else:
+            check_dataloader, check_metric = data["train_dataloader"], "val_loss"
+        check_value = trainer.validate(mlp, check_dataloader)[0][check_metric]
         logger.info(
-            f"Loaded model loss: {check_loss:.6f} "
+            f"Loaded model {check_metric}: {check_value:.6f} "
             f"(best trial value: {study.best_trial.value:.6f})"
         )
 
@@ -302,7 +307,7 @@ def main(cfg: DKOptimizeClassifierConfig) -> None:
     trainer = L.Trainer()
 
     validation_dataloader = data["val_dataloader"] or data["train_dataloader"]
-    check_loss = trainer.validate(mlp, validation_dataloader)[0]["val_loss"]
+    trainer.validate(mlp, validation_dataloader)
 
     output_path = f"{Path(original_data_path).stem}_optimized.json"
     save_trained_model(output_path, cfg, model_dict, data, selected_features, output)

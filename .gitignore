@@ -13,3 +13,11 @@ outputs/
 
 # Mac OSX
 .DS_Store
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local notes and plans
+journal/

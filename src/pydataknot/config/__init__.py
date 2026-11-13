@@ -77,6 +77,7 @@ class DKOutlierDetectionConfig:
 @dataclass
 class DKBaseConfig:
     filter_outliers: bool = True
+    stratify: bool = True
 
 
 @dataclass
