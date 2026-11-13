@@ -4,28 +4,33 @@ import torch
 
 from pydataknot.train_classifier import setup_data
 
+
 NUM_ROWS = 40
 NUM_COLS = 6
 
 
-def make_fluid_data():
+def make_fluid_data(num_rows: int, num_cols: int):
     # Small DataKnot-style dataset and labelset with two classes
     torch.manual_seed(0)
-    x = torch.randn(NUM_ROWS, NUM_COLS)
+    x = torch.randn(num_rows, num_cols)
     source = {
-        "cols": NUM_COLS,
-        "data": {str(i): x[i].tolist() for i in range(NUM_ROWS)},
+        "cols": num_cols,
+        "data": {str(i): x[i].tolist() for i in range(num_rows)},
     }
     target = {
         "cols": 1,
-        "data": {str(i): ["a" if i % 2 == 0 else "b"] for i in range(NUM_ROWS)},
+        "data": {str(i): ["a" if i % 2 == 0 else "b"] for i in range(num_rows)},
     }
     return x, source, target
 
 
-def make_cfg(scaler=None, validation=0.25):
+def make_cfg(scaler=None, validation=0.25, stratify=False):
     return OmegaConf.create(
-        {"scaler": scaler, "mlp": {"validation": validation, "batch_size": 8}}
+        {
+            "scaler": scaler,
+            "stratify": stratify,
+            "mlp": {"validation": validation, "batch_size": 8},
+        }
     )
 
 
@@ -33,7 +38,7 @@ NORMALIZE = {"_target_": "pydataknot.scaler.FluidNormalize"}
 
 
 def test_scaler_fit_on_train_split_only():
-    x, source, target = make_fluid_data()
+    x, source, target = make_fluid_data(NUM_ROWS, NUM_COLS)
     data = setup_data(source, target, make_cfg(NORMALIZE))
 
     # Fit on the train split, the scaled train data spans exactly [0, 1]
@@ -57,7 +62,7 @@ def test_scaler_fit_on_train_split_only():
 
 
 def test_no_validation_split():
-    x, source, target = make_fluid_data()
+    x, source, target = make_fluid_data(NUM_ROWS, NUM_COLS)
     data = setup_data(source, target, make_cfg(NORMALIZE, validation=0.0))
 
     assert data["val_dataloader"] is None
@@ -70,7 +75,7 @@ def test_no_validation_split():
 
 @pytest.mark.parametrize("validation", [0.0, 0.25])
 def test_no_scaler(validation):
-    x, source, target = make_fluid_data()
+    x, source, target = make_fluid_data(NUM_ROWS, NUM_COLS)
     data = setup_data(source, target, make_cfg(None, validation))
 
     assert data["scaler"] is None
@@ -80,3 +85,15 @@ def test_no_scaler(validation):
     train = data["train_dataset"].source
     rows = {tuple(r) for r in x.tolist()}
     assert all(tuple(r) in rows for r in train.tolist())
+
+
+def test_stratify_raises():
+    _, source, target = make_fluid_data(3, 8)
+
+    # Test to confirm that two few classes with data stratification on raises
+    # a specific error.
+    with pytest.raises(ValueError, match="The least populated class *"):
+        setup_data(source, target, make_cfg(NORMALIZE, stratify=True))
+
+    # Confirm that we can run this data if stratify is False.
+    setup_data(source, target, make_cfg(NORMALIZE, stratify=False))

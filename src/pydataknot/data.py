@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Tuple
 
 import hydra
 from loguru import logger
+import numpy as np
 from omegaconf import DictConfig
 from sklearn.model_selection import train_test_split
 import torch
@@ -158,6 +159,13 @@ def split_dataset_for_validation(
     y = dataset.target.numpy()
 
     classes = y.argmax(axis=-1) if stratify else None
+    if classes is not None and np.any(np.bincount(classes) < 2):
+        raise ValueError(
+            "The least populated class has less than two entries, which is a "
+            "requirement for data stratification. If you want, run with "
+            "stratify=false to bypass this."
+        )
+
     x_train, x_test, y_train, y_test = train_test_split(
         x, y, test_size=val_ratio, random_state=seed, shuffle=True, stratify=classes
     )

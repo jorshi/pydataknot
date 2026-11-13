@@ -71,7 +71,7 @@ def setup_data(source: Dict, target: Dict, cfg: DKClassifierConfig) -> Dict:
         logger.info(f"Using a validation split ratio of {val_ratio}")
         # TODO: add a seed for valdiation
         train_dataset, val_dataset = dkdata.split_dataset_for_validation(
-            train_dataset, val_ratio
+            train_dataset, val_ratio, stratify=cfg.stratify
         )
         early_stopping = EarlyStopping("val_loss", patience=100)
         callbacks.append(early_stopping)
